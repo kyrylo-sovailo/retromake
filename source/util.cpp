@@ -28,14 +28,14 @@ std::vector<std::string> rm::parse(const std::string &string, bool delimiter_onl
     for (auto ci = string.cbegin(); ci != string.cend(); ci++)
     {
         const char c = *ci;
-        if (c == ',' || (!delimiter_only_comma && std::isalnum(c)))
+        if (c == ',' || (!delimiter_only_comma && !std::isalnum(c)))
         {
-            if (request_new) { result.push_back(std::string(1, c)); request_new = false; }
-            else result.back().push_back(c);
+            request_new = true;
         }
         else
         {
-            request_new = true;
+            if (request_new) { result.push_back(std::string(1, c)); request_new = false; }
+            else result.back().push_back(c);
         }
     }
     return result;

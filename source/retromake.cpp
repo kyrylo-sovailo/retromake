@@ -7,6 +7,7 @@
 #include "../include/module_vscode.h"
 #include "../include/module_vscodium.h"
 
+#include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <cctype>
@@ -15,6 +16,7 @@
 #include <string>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <vector>
 
 std::string rm::RetroMake::_find_source_directory(const std::string &cmakecache)
 {
@@ -78,7 +80,8 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
             if (argument == arguments.cend()) throw std::runtime_error("Expected list of requested modules after -G");
             std::vector<std::string> requested_modules = parse(*argument, true);
             if (requested_modules.empty()) throw std::runtime_error("Expected list of requested modules after -G");
-            _requested_modules.insert(_requested_modules.end(), requested_modules.cbegin(), requested_modules.cend());
+            for (auto requested_module = requested_modules.cbegin(); requested_module != requested_modules.cend(); requested_module++)
+                _requested_modules.push_back(trim(*requested_module));
             argument = arguments.erase(argument);
         }
         else if (*argument == "-B")
@@ -114,12 +117,12 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
             if (cmakelists_exists)
             {
                 if (!source_directory.empty()) throw std::runtime_error("Multiply source directories provided");
-                source_directory = *argument;
+                source_directory = argument_directory;
             }
             else
             {
                 if (!binary_directory.empty()) throw std::runtime_error("Multiply binary directories provided");
-                binary_directory = *argument;
+                binary_directory = argument_directory;
                 if (!source_directory.empty()) throw std::runtime_error("Multiply source directories provided");
                 source_directory = _find_source_directory(cmakecache_directory);
                 if (source_directory.empty()) throw std::runtime_error(*argument + "/CMakeCache.txt does not contain source directory");
@@ -146,7 +149,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
 extern char **environ;
 void rm::RetroMake::_parse_environment()
 {
-    for (char **pentry = environ; pentry != nullptr; pentry++)
+    for (char **pentry = environ; *pentry != nullptr; pentry++)
     {
         const char *entry = *pentry;
         const char *equal = std::strchr(entry, '=');
@@ -240,22 +243,21 @@ int rm::RetroMake::_work()
     else if (pid == 0)
     {
         //I am child
-        arguments.push_back("-B");
-        arguments.push_back(binary_directory);
-        arguments.push_back("-S");
-        arguments.push_back(source_directory);
-
-        std::vector<char*> argv; argv.reserve(arguments.size());
+        std::vector<std::string> prepand({"cmake", "-B", binary_directory, "-S", source_directory});
+        arguments.insert(arguments.begin(), prepand.cbegin(), prepand.cend());
+        std::vector<char*> argv; argv.reserve(arguments.size() + 1);
         for (auto argument = arguments.begin(); argument != arguments.end(); argument++)
             argv.push_back(&argument->at(0));
+        argv.push_back(nullptr);
 
-        std::vector<std::string> envp_mem; envp_mem.reserve(environment.size());
+        std::vector<std::string> envp_mem; envp_mem.reserve(environment.size() + 1);
         std::vector<char*> envp; envp.reserve(environment.size());
         for (auto entry = environment.cbegin(); entry != environment.cend(); entry++)
         {
             envp_mem.push_back(entry->first + "=" + entry->second);
             envp.push_back(&envp_mem.back().at(0));
         }
+        envp.push_back(nullptr);
 
         execvpe("cmake", argv.data(), envp.data());
         throw std::runtime_error("execvpe() failed"); //Never happens

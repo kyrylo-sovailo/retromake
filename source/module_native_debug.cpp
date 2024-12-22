@@ -26,9 +26,9 @@ std::vector<std::string> rm::NativeDebugModule::slots() const
 bool rm::NativeDebugModule::match(const std::string &module) const
 {
     const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "webfreak") return true;
-    if (module_parse.size() == 2 && lower(module_parse[0]) == "web" && lower(module_parse[1]) == "freak") return true;
-    if (module_parse.size() == 2 && lower(module_parse[0]) == "native" && lower(module_parse[1]) == "debug") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "webfreak") return true;
+    if (module_parse.size() == 2 && lower(trim(module_parse[0])) == "web" && lower(trim(module_parse[1])) == "freak") return true;
+    if (module_parse.size() == 2 && lower(trim(module_parse[0])) == "native" && lower(trim(module_parse[1])) == "debug") return true;
     return false;
 }
 

@@ -24,8 +24,8 @@ std::vector<std::string> rm::ClangModule::slots() const
 bool rm::ClangModule::match(const std::string &module) const
 {
     const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "clang") return true;
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "llvm") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "clang") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "llvm") return true;
     return false;
 }
 

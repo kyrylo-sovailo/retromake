@@ -26,10 +26,10 @@ std::vector<std::string> rm::VSCodeModule::slots() const
 bool rm::VSCodeModule::match(const std::string &module) const
 {
     const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "vscode") return true;
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "code") return true;
-    if (module_parse.size() == 2 && lower(module_parse[0]) == "vs" && lower(module_parse[1]) == "code") return true;
-    if (module_parse.size() == 3 && lower(module_parse[0]) == "visual" && lower(module_parse[1]) == "studio" && lower(module_parse[2]) == "code") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "vscode") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "code") return true;
+    if (module_parse.size() == 2 && lower(trim(module_parse[0])) == "vs" && lower(trim(module_parse[1])) == "code") return true;
+    if (module_parse.size() == 3 && lower(trim(module_parse[0])) == "visual" && lower(trim(module_parse[1])) == "studio" && lower(trim(module_parse[2])) == "code") return true;
     return false;
 }
 

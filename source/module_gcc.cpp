@@ -24,8 +24,8 @@ std::vector<std::string> rm::GCCModule::slots() const
 bool rm::GCCModule::match(const std::string &module) const
 {
     const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "gcc") return true;
-    if (module_parse.size() == 1 && lower(module_parse[0]) == "g++") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "gcc") return true;
+    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "g++") return true;
     return false;
 }
 
