@@ -4,6 +4,8 @@
 
 rm::Module *rm::MakeModule::create_module(const std::string &requested_module)
 {
+    if (requested_module.empty()) return new MakeModule();
+
     std::vector<std::string> module_parse = parse(requested_module, false);
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "make") return new MakeModule();
@@ -17,6 +19,11 @@ rm::Module *rm::MakeModule::create_module(const std::string &requested_module)
 rm::MakeModule::MakeModule()
 {}
 
+int rm::MakeModule::order() const
+{
+    return 30;
+}
+
 std::string rm::MakeModule::id() const
 {
     return "make";
@@ -25,6 +32,11 @@ std::string rm::MakeModule::id() const
 std::string rm::MakeModule::name() const
 {
     return "Make";
+}
+
+std::string rm::MakeModule::help() const
+{
+    return "Unix Makefile build system";
 }
 
 std::vector<std::string> rm::MakeModule::slots() const
@@ -47,6 +59,3 @@ void rm::MakeModule::post_work(RetroMake *system)
 {
     //Do nothing
 }
-
-rm::MakeModule::~MakeModule()
-{}

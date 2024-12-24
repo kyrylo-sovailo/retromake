@@ -14,8 +14,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -50,6 +52,51 @@ std::string rm::RetroMake::_find_source_directory(const std::string &cmakecache)
     }
 }
 
+std::vector<rm::CreateModule*> rm::RetroMake::_load_module_functions()
+{
+    //Built-in modules
+    std::vector<CreateModule*> module_functions;
+    module_functions.push_back(ClangModule::create_module);
+    module_functions.push_back(GCCModule::create_module);
+    module_functions.push_back(MakeModule::create_module);
+    module_functions.push_back(NativeDebugModule::create_module);
+    module_functions.push_back(VSCodeModule::create_module);
+    module_functions.push_back(VSCodiumModule::create_module);
+
+    //External modules
+    std::string executable_directory(256, '\0');
+    while (true)
+    {
+        int read = readlink("/proc/self/exe", &executable_directory[0], executable_directory.size());
+        if (read < 0) throw std::runtime_error("readlink(\"/proc/self/exe\") failed");
+        else if (read == executable_directory.size()) executable_directory.resize(executable_directory.size() * 2);
+        else { executable_directory.resize(read); break; }
+    }
+    auto slash = executable_directory.rfind('/');
+    if (slash == std::string::npos) throw std::runtime_error("readlink(\"/proc/self/exe\") returned unexpected path");
+    executable_directory.resize(slash + 1);
+    DIR *directory = opendir(executable_directory.c_str());
+    if (directory == nullptr) throw std::runtime_error("opendir() failed");
+    while (true)
+    {
+        struct dirent *entry = readdir(directory);
+        if (entry == nullptr) break;
+        if (entry->d_type != DT_REG) continue;
+        if (strlen(entry->d_name) < 4 || std::memcmp(entry->d_name + strlen(entry->d_name) - 3, ".so", 3) != 0) continue;
+        executable_directory.resize(slash + 1);
+        executable_directory += entry->d_name;
+        void *handle = dlopen(executable_directory.c_str(), RTLD_NOW);
+        if (handle == nullptr) { std::cerr << "RetroMake Warning: failed to open module " << entry->d_name << std::endl; continue; }
+        void *create_module = dlsym(handle, "create_module");
+        if (create_module == nullptr) { std::cerr << "RetroMake Warning: failed to find \"create_module\" in module " << entry->d_name << std::endl; continue; }
+        std::cerr << "RetroMake Info: loading external module " << entry->d_name << std::endl;
+        module_functions.push_back(reinterpret_cast<CreateModule*>(create_module));
+    }
+    closedir(directory);
+
+    return module_functions;
+}
+
 rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
 {
     //Objective:
@@ -69,8 +116,11 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
     {
         if (*argument == "--open" || *argument == "--build" || *argument == "--install"
         || *argument == "-E" || *argument == "-P" || *argument == "-N"
-        || (*argument == "--help" && argument + 1 != arguments.cend())
-        || (argument->find("--help-") == 0)) return Mode::passthrough;
+        || (*argument == "--help" && argument + 1 != arguments.cend() && *(argument + 1) != "cmake")
+        || (argument->find("--help-") == 0 && *argument != "--help-cmake")) return Mode::passthrough;
+
+        if ((*argument == "--help" && argument + 1 != arguments.cend() && *(argument + 1) == "cmake")
+        || (*argument == "--help-cmake")) return Mode::cmake_help;
         
         if (*argument == "--help" || *argument == "-help" || *argument == "-usage"
         || *argument == "-h" || *argument == "-H" || *argument == "/?") return Mode::help;
@@ -152,6 +202,11 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
         }
         if (binary_directory.back() != '/') binary_directory.push_back('/');
     }
+
+    //Failure
+    if (source_directory.empty() || binary_directory.empty())
+        throw std::runtime_error("No source or binary directory provided");
+
     return Mode::normal;
 }
 
@@ -212,61 +267,71 @@ void rm::RetroMake::_call_passthrough()
     throw std::runtime_error("execv() failed"); //Never happens
 }
 
+const char *help1 =
+R"(Usage
+
+  retromake [options] <path-to-source> [-G <requested-modules>]
+  retromake [options] <path-to-existing-build> [-G <requested-modules>]
+  retromake [options] -S <path-to-source> -B <path-to-build> [-G <requested-modules>]
+
+Specify a source directory to (re-)generate a build system for it in the
+current working directory. Specify an existing build directory to
+re-generate its build system.
+
+Options
+  -G <requested-modules>            = Specify a comma-separated case-invariant list of requested modules.
+  -h,-H,--help,-help,-usage,/?      = Print usage information and exit.
+  --version,-version,/V [<file>]    = Print version number and exit.
+  --help cmake                      = Print cmake's help and exit.
+  --help-cmake                      = Print cmake's help and exit.
+  
+  [ all other are passed through to cmake, see 'cmake --help' ]
+
+Modules
+
+The following built-in modules are available:
+)";
+
+const char *help2 =
+R"(
+Further information on the project's page (github.com/kyrylo-sovailo/retromake).
+)";
+
 void rm::RetroMake::_print_help()
 {
-    std::cout << "RetroMake help" << std::endl;
+    _load_all_modules();
+    std::cout << help1;
+    for (auto module = _modules.cbegin(); module != _modules.cend(); module++)
+    {
+        std::cout << "  " << std::setw(32) << std::left << (*module)->name() << "= " << (*module)->help() << '\n';
+    }
+    std::cout << help2;
 }
 
+const char *version =
+R"(retromake version 0.0.1
+
+RetroMake is developed by Kyrylo Sovailo (github.com/kyrylo-sovailo/retromake).
+)";
 void rm::RetroMake::_print_version()
 {
-    std::cout << "RetroMake version -1" << std::endl;
+    std::cout << version << std::endl;
 }
 
-void rm::RetroMake::_load_modules()
+void rm::RetroMake::_print_cmake_help()
 {
-    typedef Module* (CreateModule)(const std::string &requested_module);
-    
-    //Built-in modules
-    std::vector<CreateModule*> module_functions;
-    module_functions.push_back(ClangModule::create_module);
-    module_functions.push_back(GCCModule::create_module);
-    module_functions.push_back(MakeModule::create_module);
-    module_functions.push_back(NativeDebugModule::create_module);
-    module_functions.push_back(VSCodeModule::create_module);
-    module_functions.push_back(VSCodiumModule::create_module);
+    char argv0[] = "cmake";
+    char argv1[] = "--help";
+    char *argv[] = { argv0, argv1, nullptr };
+    execvp("cmake", argv);
+    throw std::runtime_error("execvpe() failed"); //Never happens
+    std::cout << version << std::endl;
+}
 
-    //External modules
-    std::string executable_directory(256, '\0');
-    while (true)
-    {
-        int read = readlink("/proc/self/exe", &executable_directory[0], executable_directory.size());
-        if (read < 0) throw std::runtime_error("readlink(\"/proc/self/exe\") failed");
-        else if (read == executable_directory.size()) executable_directory.resize(executable_directory.size() * 2);
-        else { executable_directory.resize(read); break; }
-    }
-    auto slash = executable_directory.rfind('/');
-    if (slash == std::string::npos) throw std::runtime_error("readlink(\"/proc/self/exe\") returned unexpected path");
-    executable_directory.resize(slash + 1);
-    DIR *directory = opendir(executable_directory.c_str());
-    if (directory == nullptr) throw std::runtime_error("opendir() failed");
-    while (true)
-    {
-        struct dirent *entry = readdir(directory);
-        if (entry == nullptr) break;
-        if (entry->d_type != DT_REG) continue;
-        if (strlen(entry->d_name) < 4 || std::memcmp(entry->d_name + strlen(entry->d_name) - 3, ".so", 3) != 0) continue;
-        executable_directory.resize(slash + 1);
-        executable_directory += entry->d_name;
-        void *handle = dlopen(executable_directory.c_str(), RTLD_NOW);
-        if (handle == nullptr) { std::cerr << "RetroMake Warning: failed to open module " << entry->d_name << std::endl; continue; }
-        void *create_module = dlsym(handle, "create_module");
-        if (create_module == nullptr) { std::cerr << "RetroMake Warning: failed to find \"create_module\" in module " << entry->d_name << std::endl; continue; }
-        std::cerr << "RetroMake Info: loading external module " << entry->d_name << std::endl;
-        module_functions.push_back(reinterpret_cast<CreateModule*>(create_module));
-    }
-    closedir(directory);
+void rm::RetroMake::_load_requested_modules()
+{
+    auto module_functions = _load_module_functions();
 
-    //Module matching
     for (auto requested_module = _requested_modules.cbegin(); requested_module != _requested_modules.cend(); requested_module++)
     {
         std::unique_ptr<Module> matched_module;
@@ -284,6 +349,17 @@ void rm::RetroMake::_load_modules()
             "String \"" + *requested_module + "\" is not matched by any module");
         _modules.push_back(matched_module.release());
     }
+    std::sort(_modules.begin(), _modules.end(), [](Module *a, Module *b){ return a->order() < b->order(); });
+}
+
+void rm::RetroMake::_load_all_modules()
+{
+    auto module_functions = _load_module_functions();
+    for (auto module_function = module_functions.cbegin(); module_function != module_functions.cend(); module_function++)
+    {
+        _modules.push_back((*module_function)(""));
+    }
+    std::sort(_modules.begin(), _modules.end(), [](Module *a, Module *b){ return a->order() < b->order(); });
 }
 
 void rm::RetroMake::_check() const
@@ -357,29 +433,31 @@ void rm::RetroMake::_post_work()
 int rm::RetroMake::run(int argc, char **argv)
 {
     Mode mode = _parse_arguments(argc, argv);
-    if (mode == Mode::normal)
+    int status;
+    switch (mode)
     {
+    case Mode::normal:
         _parse_environment();
         _read_configuration();
-        _load_modules();
+        _load_requested_modules();
         _check();
         _pre_work();
-        int status = _work();
+        status = _work();
         if (status != 0) return status;
         _post_work();
-    }
-    else if (mode == Mode::passthrough)
-    {
+        break;
+    case Mode::passthrough:
         _call_passthrough();
         return 1; //Never happens
-    }
-    else if (mode == Mode::help)
-    {
+    case Mode::help:
         _print_help();
-    }
-    else
-    {
+        break;
+    case Mode::version:
         _print_version();
+        break;
+    case Mode::cmake_help:
+        _print_cmake_help();
+        return 1; //Never happens
     }
     return 0;
 }

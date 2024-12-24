@@ -8,6 +8,8 @@
 
 rm::Module *rm::NativeDebugModule::create_module(const std::string &requested_module)
 {
+    if (requested_module.empty()) return new NativeDebugModule();
+
     std::vector<std::string> module_parse = parse(requested_module, false);
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "webfreak") return new NativeDebugModule();
@@ -19,6 +21,11 @@ rm::Module *rm::NativeDebugModule::create_module(const std::string &requested_mo
 rm::NativeDebugModule::NativeDebugModule()
 {}
 
+int rm::NativeDebugModule::order() const
+{
+    return 80;
+}
+
 std::string rm::NativeDebugModule::id() const
 {
     return "nativedebug";
@@ -29,6 +36,11 @@ std::string rm::NativeDebugModule::name() const
     return "Native Debug";
 }
 
+std::string rm::NativeDebugModule::help() const
+{
+    return "WebFreak's debugger for VS Code/Codium";
+}
+
 std::vector<std::string> rm::NativeDebugModule::slots() const
 {
     return { "debug" };
@@ -36,7 +48,11 @@ std::vector<std::string> rm::NativeDebugModule::slots() const
 
 void rm::NativeDebugModule::check(const std::vector<Module*> &modules) const
 {
-    //No additional checks
+    for (auto module = modules.cbegin(); module != modules.cend(); module++)
+    {
+        if ((*module)->id() == "vscodium" || (*module)->id() == "vscode") return;
+    }
+    throw std::runtime_error("Module \"Native Debug\" depends on either \"VS Codium\" or \"VS Code\"");
 }
 
 void rm::NativeDebugModule::pre_work(RetroMake *system)
@@ -70,8 +86,5 @@ void rm::NativeDebugModule::post_work(RetroMake *system)
     "        }\n"
     "    ]\n"
     "}\n";
-    update_file(tasks_file, content);
+    //update_file(tasks_file, content);
 }
-
-rm::NativeDebugModule::~NativeDebugModule()
-{}

@@ -11,5 +11,4 @@ namespace rm
     std::map<std::string, std::string> parse_config(const std::string &path);
     bool directory_exists(const std::string &path, std::string *absolute_path);
     bool file_exists(const std::string &path, std::string *absolute_path);
-    void update_file(const std::string &path, const std::string &content);
 }

@@ -4,7 +4,7 @@
 I **love** CMake. Unfortunately, it only works with "true" IDEs like Visual Studio, fully ignoring the existence of fancy text editors and not-quite-abandoning other IDEs. RetroMake is here to change that!
 
 ### Command-line interface
-RetroMake has the same command-line interface as CMake except for the `-G` argument. RetroMake accepts not one entity, but many, and these many entity occupy multiple slots. The standard slots include:
+RetroMake has the same command-line interface as CMake except for the `-G` argument. RetroMake accepts not one entity, but many, and these many entities occupy multiple slots. The standard slots include:
  - Compiler -- compiler and linker (essential)
  - Build system -- build automation system (essential)
  - Text editor -- basic text editor
@@ -25,7 +25,7 @@ RetroMake is aware has following modules built-in:
 4.  Ninja :x:
   - Occupied slots: build system
   - Dependencies: none
-5.  Visual Studio Code (alias: VSCode, Code, VS Code) :white_check_mark:
+5.  VS Code (alias: VSCode, Code, VS Code, Visual Studio Code) :white_check_mark:
   - Occupied slots: text editor
   - Dependencies: none
 6.  VS Codium (alias: VSCodium, Codium, VSCode OSS, VS Code OSS) :white_check_mark:

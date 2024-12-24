@@ -139,30 +139,3 @@ bool rm::file_exists(const std::string &path, std::string *absolute_path)
     }
     return true;
 }
-
-void rm::update_file(const std::string &path, const std::string &content)
-{
-    bool rewrite;
-    {
-        std::ifstream file(path, std::ios::binary);
-        rewrite = !file.good();
-        if (!rewrite)
-        {
-            file.seekg(0, std::ios::end);
-            size_t file_size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            rewrite = !file.good() || file_size != content.size();
-        }
-        if (!rewrite)
-        {
-            std::string existing_content;
-            file.read(&existing_content[0], content.size());
-            rewrite = !file.good() || content != existing_content;
-        }
-    }
-
-    if (!rewrite) return;
-    std::ofstream file(path, std::ios::binary);
-    file.write(content.c_str(), content.size());
-    if (!file.good()) throw std::runtime_error("Failed to write file " + path);
-}
