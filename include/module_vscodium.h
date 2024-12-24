@@ -1,10 +1,21 @@
 #pragma once
 #include "module.h"
 
+namespace rapidjson
+{
+    class Value;
+    class CrtAllocator;
+    template <typename BaseAllocator = CrtAllocator> class MemoryPoolAllocator;
+}
+
 namespace rm
 {
     class VSCodiumModule : public Module
     {
+    private:
+        bool _checkout_string(rapidjson::Value &string, rapidjson::MemoryPoolAllocator<> &allocator, const char *value);
+        bool _checkout_args(rapidjson::Value &args, rapidjson::MemoryPoolAllocator<> &allocator);
+    
     public:
         static Module *create_module(const std::string &requested_module);
 
