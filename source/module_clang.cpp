@@ -1,7 +1,15 @@
 #include "../include/module_clang.h"
 #include "../include/retromake.h"
 #include "../include/util.h"
-#include <stdexcept>
+
+rm::Module *rm::ClangModule::create_module(const std::string &requested_module)
+{
+    std::vector<std::string> module_parse = parse(requested_module, false);
+    for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
+    if (module_parse.size() == 1 && module_parse[0] == "clang") return new ClangModule();
+    if (module_parse.size() == 1 && module_parse[0] == "llvm") return new ClangModule();
+    return nullptr;
+}
 
 rm::ClangModule::ClangModule()
 {}
@@ -19,14 +27,6 @@ std::string rm::ClangModule::name() const
 std::vector<std::string> rm::ClangModule::slots() const
 {
     return { "compiler" };
-}
-
-bool rm::ClangModule::match(const std::string &module) const
-{
-    const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "clang") return true;
-    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "llvm") return true;
-    return false;
 }
 
 void rm::ClangModule::check(const std::vector<Module*> &modules) const

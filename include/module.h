@@ -12,7 +12,6 @@ namespace rm
         virtual std::string id() const = 0;
         virtual std::string name() const = 0;
         virtual std::vector<std::string> slots() const = 0;
-        virtual bool match(const std::string &module) const = 0;
         virtual void check(const std::vector<Module*> &modules) const = 0;
         virtual void pre_work(RetroMake *system) = 0;
         virtual void post_work(RetroMake *system) = 0;

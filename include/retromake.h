@@ -31,6 +31,7 @@ namespace rm
         
         Mode _parse_arguments(int argc, char **argv);
         void _parse_environment();
+        void _read_configuration();
         void _call_passthrough();
         void _print_help();
         void _print_version();
@@ -42,5 +43,6 @@ namespace rm
 
     public:
         int run(int argc, char **argv);
+        ~RetroMake();
     };
 }

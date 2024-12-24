@@ -6,14 +6,15 @@ namespace rm
     class VSCodiumModule : public Module
     {
     public:
+        static Module *create_module(const std::string &requested_module);
+
         VSCodiumModule();
-        virtual std::string id() const;
-        virtual std::string name() const;
-        virtual std::vector<std::string> slots() const;
-        virtual bool match(const std::string &module) const;
-        virtual void check(const std::vector<Module*> &modules) const;
-        virtual void pre_work(RetroMake *system);
-        virtual void post_work(RetroMake *system);
-        virtual ~VSCodiumModule();
+        std::string id() const override;
+        std::string name() const override;
+        std::vector<std::string> slots() const override;
+        void check(const std::vector<Module*> &modules) const override;
+        void pre_work(RetroMake *system) override;
+        void post_work(RetroMake *system) override;
+        ~VSCodiumModule() override;
     };
 }

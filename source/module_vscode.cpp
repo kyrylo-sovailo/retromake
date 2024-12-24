@@ -2,8 +2,20 @@
 #include "../include/retromake.h"
 #include "../include/util.h"
 
-#include <stdexcept>
 #include <sys/stat.h>
+
+#include <stdexcept>
+
+rm::Module *rm::VSCodeModule::create_module(const std::string &requested_module)
+{
+    std::vector<std::string> module_parse = parse(requested_module, false);
+    for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
+    if (module_parse.size() == 1 && module_parse[0] == "vscode") return new VSCodeModule();
+    if (module_parse.size() == 1 && module_parse[0] == "code") return new VSCodeModule();
+    if (module_parse.size() == 2 && module_parse[0] == "vs" && module_parse[1] == "code") return new VSCodeModule();
+    if (module_parse.size() == 3 && module_parse[0] == "visual" && module_parse[1] == "studio" && module_parse[2] == "code") return new VSCodeModule();
+    return nullptr;
+}
 
 rm::VSCodeModule::VSCodeModule()
 {}
@@ -21,16 +33,6 @@ std::string rm::VSCodeModule::name() const
 std::vector<std::string> rm::VSCodeModule::slots() const
 {
     return { "editor" };
-}
-
-bool rm::VSCodeModule::match(const std::string &module) const
-{
-    const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "vscode") return true;
-    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "code") return true;
-    if (module_parse.size() == 2 && lower(trim(module_parse[0])) == "vs" && lower(trim(module_parse[1])) == "code") return true;
-    if (module_parse.size() == 3 && lower(trim(module_parse[0])) == "visual" && lower(trim(module_parse[1])) == "studio" && lower(trim(module_parse[2])) == "code") return true;
-    return false;
 }
 
 void rm::VSCodeModule::check(const std::vector<Module*> &modules) const

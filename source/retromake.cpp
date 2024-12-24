@@ -7,15 +7,19 @@
 #include "../include/module_vscode.h"
 #include "../include/module_vscodium.h"
 
-#include <cstddef>
+#include <dirent.h>
+#include <dlfcn.h>
+#include <limits.h>
+#include <pwd.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <cstring>
 #include <fstream>
-#include <cctype>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
-#include <unistd.h>
-#include <sys/wait.h>
 #include <vector>
 
 std::string rm::RetroMake::_find_source_directory(const std::string &cmakecache)
@@ -27,7 +31,7 @@ std::string rm::RetroMake::_find_source_directory(const std::string &cmakecache)
     while (true)
     {
         char c;
-        bool good = static_cast<bool>(file.read(&c, 1));
+        const bool good = static_cast<bool>(file.read(&c, 1));
         if (pattern_match == pattern.size())
         {
             if (!good || c == '\0' || c == '\n' || c == '\r') return result;
@@ -153,11 +157,45 @@ void rm::RetroMake::_parse_environment()
     {
         const char *entry = *pentry;
         const char *equal = std::strchr(entry, '=');
-        if (equal == nullptr) throw std::runtime_error("rm::RetroMake::_get_environment(): invalid environ");
+        if (equal == nullptr) throw std::runtime_error("invalid environ");
         const std::string name = std::string(entry, (equal - entry));
         const std::string value = std::string(equal + 1);
+        if (name.empty()) throw std::runtime_error("invalid environ"); //Value can be empty!
         environment[name] = value;
     }
+}
+
+void rm::RetroMake::_read_configuration()
+{
+    //Check if -G argument was given
+    if (!_requested_modules.empty()) return;
+    
+    //Check environment
+    auto find = environment.find("RETROMAKE_REQUESTED_MODULES");
+    if (find != environment.cend()) { _requested_modules = parse(trim(find->second), true); return; }
+
+    //Check home directory
+    find = environment.find("HOME");
+    std::string home;
+    if (find != environment.cend()) home = find->second;
+    else
+    {
+        struct passwd *user = getpwuid(getuid());
+        if (user == nullptr) throw std::runtime_error("getpwuid() failed");
+        home = user->pw_dir;
+    }
+    if (home.empty()) throw std::runtime_error("Invalid home directory");
+    else if (home.back() != '/') home += '/';
+    std::string config_path = home + ".retromake.conf";
+    auto config = parse_config(config_path);
+    find = config.find("RETROMAKE_REQUESTED_MODULES");
+    if (find != config.cend()) { _requested_modules = parse(trim(find->second), true); return; }
+
+    //Check configuration directory
+    config = parse_config("/etc/retromake.conf");
+    if (find != config.cend()) { _requested_modules = parse(trim(find->second), true); return; }
+
+    throw std::runtime_error("List of requested modules not provided");
 }
 
 void rm::RetroMake::_call_passthrough()
@@ -181,31 +219,65 @@ void rm::RetroMake::_print_version()
 
 void rm::RetroMake::_load_modules()
 {
-    std::vector<rm::Module*> all_modules;
-    all_modules.push_back(new ClangModule());
-    all_modules.push_back(new GCCModule());
-    all_modules.push_back(new MakeModule());
-    all_modules.push_back(new NativeDebugModule());
-    all_modules.push_back(new VSCodeModule());
-    all_modules.push_back(new VSCodiumModule());
+    typedef Module* (CreateModule)(const std::string &requested_module);
+    
+    //Built-in modules
+    std::vector<CreateModule*> module_functions;
+    module_functions.push_back(ClangModule::create_module);
+    module_functions.push_back(GCCModule::create_module);
+    module_functions.push_back(MakeModule::create_module);
+    module_functions.push_back(NativeDebugModule::create_module);
+    module_functions.push_back(VSCodeModule::create_module);
+    module_functions.push_back(VSCodiumModule::create_module);
 
-    //TODO: load external modules
-
-    for (auto module_string = _requested_modules.cbegin(); module_string != _requested_modules.cend(); module_string++)
+    //External modules
+    std::string executable_directory(256, '\0');
+    while (true)
     {
-        Module *matched_module = nullptr;
-        for (auto module = all_modules.cbegin(); module != all_modules.cend(); module++)
+        int read = readlink("/proc/self/exe", &executable_directory[0], executable_directory.size());
+        if (read < 0) throw std::runtime_error("readlink(\"/proc/self/exe\") failed");
+        else if (read == executable_directory.size()) executable_directory.resize(executable_directory.size() * 2);
+        else { executable_directory.resize(read); break; }
+    }
+    auto slash = executable_directory.rfind('/');
+    if (slash == std::string::npos) throw std::runtime_error("readlink(\"/proc/self/exe\") returned unexpected path");
+    executable_directory.resize(slash + 1);
+    DIR *directory = opendir(executable_directory.c_str());
+    if (directory == nullptr) throw std::runtime_error("opendir() failed");
+    while (true)
+    {
+        struct dirent *entry = readdir(directory);
+        if (entry == nullptr) break;
+        if (entry->d_type != DT_REG) continue;
+        if (strlen(entry->d_name) < 4 || std::memcmp(entry->d_name + strlen(entry->d_name) - 3, ".so", 3) != 0) continue;
+        executable_directory.resize(slash + 1);
+        executable_directory += entry->d_name;
+        void *handle = dlopen(executable_directory.c_str(), RTLD_NOW);
+        if (handle == nullptr) { std::cerr << "RetroMake Warning: failed to open module " << entry->d_name << std::endl; continue; }
+        void *create_module = dlsym(handle, "create_module");
+        if (create_module == nullptr) { std::cerr << "RetroMake Warning: failed to find \"create_module\" in module " << entry->d_name << std::endl; continue; }
+        std::cerr << "RetroMake Info: loading external module " << entry->d_name << std::endl;
+        module_functions.push_back(reinterpret_cast<CreateModule*>(create_module));
+    }
+    closedir(directory);
+
+    //Module matching
+    for (auto requested_module = _requested_modules.cbegin(); requested_module != _requested_modules.cend(); requested_module++)
+    {
+        std::unique_ptr<Module> matched_module;
+        for (auto module_function = module_functions.cbegin(); module_function != module_functions.cend(); module_function++)
         {
-            if (!(*module)->match(*module_string)) {}
-            else if (matched_module == nullptr) matched_module = *module;
+            std::unique_ptr<Module> module = std::unique_ptr<Module>((*module_function)(*requested_module));
+            if (module == nullptr) {}
+            else if (matched_module == nullptr) matched_module = std::move(module);
             else throw std::runtime_error(
                 "Module \"" + matched_module->name() + "\""
-                " and module \"" + (*module)->name() + "\""
-                " are both matched by string \"" + *module_string + "\"");
+                " and module \"" + module->name() + "\""
+                " are both matched by string \"" + *requested_module + "\"");
         }
         if (matched_module == nullptr) throw std::runtime_error(
-            "String \"" + *module_string + "\" is not matched by any module");
-        _modules.push_back(matched_module);
+            "String \"" + *requested_module + "\" is not matched by any module");
+        _modules.push_back(matched_module.release());
     }
 }
 
@@ -283,6 +355,7 @@ int rm::RetroMake::run(int argc, char **argv)
     if (mode == Mode::normal)
     {
         _parse_environment();
+        _read_configuration();
         _load_modules();
         _check();
         _pre_work();
@@ -304,6 +377,11 @@ int rm::RetroMake::run(int argc, char **argv)
         _print_version();
     }
     return 0;
+}
+
+rm::RetroMake::~RetroMake()
+{
+    for (auto module = _modules.begin(); module != _modules.end(); module++) delete (*module);
 }
 
 int _main(int argc, char **argv)

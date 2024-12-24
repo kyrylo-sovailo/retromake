@@ -1,7 +1,15 @@
 #include "../include/module_gcc.h"
 #include "../include/retromake.h"
 #include "../include/util.h"
-#include <stdexcept>
+
+rm::Module *rm::GCCModule::create_module(const std::string &requested_module)
+{
+    std::vector<std::string> module_parse = parse(requested_module, false);
+    for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
+    if (module_parse.size() == 1 && module_parse[0] == "gcc") return new GCCModule();
+    if (module_parse.size() == 1 && module_parse[0] == "g++") return new GCCModule();
+    return nullptr;
+}
 
 rm::GCCModule::GCCModule()
 {}
@@ -19,14 +27,6 @@ std::string rm::GCCModule::name() const
 std::vector<std::string> rm::GCCModule::slots() const
 {
     return { "compiler" };
-}
-
-bool rm::GCCModule::match(const std::string &module) const
-{
-    const std::vector<std::string> module_parse = parse(module, false);
-    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "gcc") return true;
-    if (module_parse.size() == 1 && lower(trim(module_parse[0])) == "g++") return true;
-    return false;
 }
 
 void rm::GCCModule::check(const std::vector<Module*> &modules) const

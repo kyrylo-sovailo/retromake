@@ -1,9 +1,11 @@
 #include "../include/util.h"
-#include <fstream>
+
 #include <limits.h>
-#include <stdexcept>
-#include <stdlib.h>
 #include <sys/stat.h>
+
+#include <cctype>
+#include <fstream>
+#include <stdexcept>
 
 std::string rm::trim(const std::string &string)
 {
@@ -39,6 +41,66 @@ std::vector<std::string> rm::parse(const std::string &string, bool delimiter_onl
         }
     }
     return result;
+}
+
+std::map<std::string, std::string> rm::parse_config(const std::string &path)
+{
+    enum class State
+    {
+        wait_name_begin,
+        wait_name_end,
+        wait_equal,
+        wait_value_begin,
+        wait_value_end
+    };
+    std::map<std::string, std::string> result;
+    std::string name, value;
+    State state = State::wait_name_begin;
+
+    std::ifstream file(path, std::ios::binary);
+    while (true)
+    {
+        char c;
+        const bool good = static_cast<bool>(file.read(&c, 1));
+        switch (state)
+        {
+        case State::wait_name_begin:
+            if (!good || c == '\0') return result;
+            else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {}
+            else if (c == '_' || std::isalpha(c)) { name.push_back(c); state = State::wait_name_end; }
+            else throw std::runtime_error("Unexpected symbol in entry name in " + path);
+            break;
+        case State::wait_name_end:
+            if (!good || c == '\0' || c == '\n' || c == '\r') throw std::runtime_error("Unexpected end of entry name in " + path);
+            else if (c == ' ' || c == '\t') state = State::wait_equal;
+            else if (c == '_' || std::isalnum(c)) name.push_back(c);
+            else if (c == '=') state = State::wait_value_begin;
+            else throw std::runtime_error("Unexpected symbol in entry name in " + path);
+            break;
+        case State::wait_equal:
+            if (!good || c == '\0' || c == '\n' || c == '\r') throw std::runtime_error("Unexpected end of entry name in " + path);
+            else if (c == ' ' || c == '\t') {}
+            else if (c == '=') state = State::wait_value_begin;
+            else throw std::runtime_error("Unexpected symbol in entry name in " + path);
+            break;
+        case State::wait_value_begin:
+            if (!good || c == '\0' || c == '\n' || c == '\r') throw std::runtime_error("Unexpected end of entry value in " + path);
+            else if (c == ' ' || c == '\t') {}
+            else { value.push_back(c); state = State::wait_value_end; }
+            break;
+        case State::wait_value_end:
+            if (!good || c == '\0' || c == '\n' || c == '\r')
+            {
+                result[name] = value;
+                if (!good || c == '\0') return result;
+                name.resize(0);
+                value.resize(0);
+                state = State::wait_name_begin;
+            }
+            else value.push_back(c);
+            break;
+        }
+    }
 }
 
 bool rm::directory_exists(const std::string &path, std::string *absolute_path)
