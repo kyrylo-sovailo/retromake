@@ -47,13 +47,13 @@ void rm::VSCodeModule::pre_work(RetroMake *system)
 
 void rm::VSCodeModule::post_work(RetroMake *system)
 {
-    const std::string vscode_directory = system->source_directory + "/.vscode";
+    const std::string vscode_directory = system->source_directory + ".vscode/";
     if (!directory_exists(vscode_directory, nullptr))
     {
         if (mkdir(vscode_directory.c_str(), 0700) != 0) throw std::runtime_error("Failed to create directory " + vscode_directory);
     }
 
-    const std::string tasks_file = vscode_directory + "/tasks.json";
+    const std::string tasks_file = vscode_directory + "tasks.json";
     const std::string content = 
     "{\n"
     "    \"tasks\":\n"

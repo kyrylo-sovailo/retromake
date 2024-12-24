@@ -51,7 +51,8 @@ std::map<std::string, std::string> rm::parse_config(const std::string &path)
         wait_name_end,
         wait_equal,
         wait_value_begin,
-        wait_value_end
+        wait_value_end,
+        wait_end_line
     };
     std::map<std::string, std::string> result;
     std::string name, value;
@@ -66,6 +67,7 @@ std::map<std::string, std::string> rm::parse_config(const std::string &path)
         {
         case State::wait_name_begin:
             if (!good || c == '\0') return result;
+            else if (c == '#') state = State::wait_end_line;
             else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {}
             else if (c == '_' || std::isalpha(c)) { name.push_back(c); state = State::wait_name_end; }
             else throw std::runtime_error("Unexpected symbol in entry name in " + path);
@@ -99,6 +101,10 @@ std::map<std::string, std::string> rm::parse_config(const std::string &path)
             }
             else value.push_back(c);
             break;
+        case State::wait_end_line:
+            if (!good || c == '\0') return result;
+            else if (c == '\n' || c == '\r') state = State::wait_name_begin;
+            break;
         }
     }
 }
@@ -114,6 +120,7 @@ bool rm::directory_exists(const std::string &path, std::string *absolute_path)
         char *absolute_path_p = ::realpath(path.c_str(), buffer);
         if (absolute_path_p == nullptr) return false;
         *absolute_path = absolute_path_p;
+        if (absolute_path->back() != '/') absolute_path->push_back('/');
     }
     return true;
 }

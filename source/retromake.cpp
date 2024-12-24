@@ -34,7 +34,11 @@ std::string rm::RetroMake::_find_source_directory(const std::string &cmakecache)
         const bool good = static_cast<bool>(file.read(&c, 1));
         if (pattern_match == pattern.size())
         {
-            if (!good || c == '\0' || c == '\n' || c == '\r') return result;
+            if (!good || c == '\0' || c == '\n' || c == '\r')
+            {
+                if (result.back() != '/') result.push_back('/');
+                return result;
+            }
             else result.push_back(c);
         }
         else
@@ -108,10 +112,10 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
         {
             std::string argument_directory;
             if (!directory_exists(*argument, &argument_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
-            const std::string cmakelists_directory = argument_directory + "/CMakeLists.txt";
-            const std::string cmakecache_directory = argument_directory + "/CMakeCache.txt";
-            const bool cmakelists_exists = file_exists(cmakelists_directory, nullptr);
-            const bool cmakecache_exists = file_exists(cmakecache_directory, nullptr);
+            const std::string cmakelists_file = argument_directory + "/CMakeLists.txt";
+            const std::string cmakecache_file = argument_directory + "/CMakeCache.txt";
+            const bool cmakelists_exists = file_exists(cmakelists_file, nullptr);
+            const bool cmakecache_exists = file_exists(cmakecache_file, nullptr);
             if (!cmakelists_exists && !cmakecache_exists)
                 throw std::runtime_error("Could not determine whether provided directory " + *argument + " is source or binary"
                 " (contains both CMakeLists.txt and CMakeCache.txt)");
@@ -128,7 +132,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
                 if (!binary_directory.empty()) throw std::runtime_error("Multiply binary directories provided");
                 binary_directory = argument_directory;
                 if (!source_directory.empty()) throw std::runtime_error("Multiply source directories provided");
-                source_directory = _find_source_directory(cmakecache_directory);
+                source_directory = _find_source_directory(cmakecache_file);
                 if (source_directory.empty()) throw std::runtime_error(*argument + "/CMakeCache.txt does not contain source directory");
             }
             argument = arguments.erase(argument);
@@ -146,6 +150,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
             if (cwd == nullptr) binary_directory.resize(binary_directory.size() * 2);
             else { binary_directory.resize(strlen(binary_directory.c_str())); break; }
         }
+        if (binary_directory.back() != '/') binary_directory.push_back('/');
     }
     return Mode::normal;
 }
@@ -176,18 +181,18 @@ void rm::RetroMake::_read_configuration()
 
     //Check home directory
     find = environment.find("HOME");
-    std::string home;
-    if (find != environment.cend()) home = find->second;
+    std::string home_directory;
+    if (find != environment.cend()) home_directory = find->second;
     else
     {
         struct passwd *user = getpwuid(getuid());
         if (user == nullptr) throw std::runtime_error("getpwuid() failed");
-        home = user->pw_dir;
+        home_directory = user->pw_dir;
     }
-    if (home.empty()) throw std::runtime_error("Invalid home directory");
-    else if (home.back() != '/') home += '/';
-    std::string config_path = home + ".retromake.conf";
-    auto config = parse_config(config_path);
+    if (home_directory.empty()) throw std::runtime_error("Invalid home directory");
+    else if (home_directory.back() != '/') home_directory += '/';
+    const std::string config_file = home_directory + ".retromake.conf";
+    auto config = parse_config(config_file);
     find = config.find("RETROMAKE_REQUESTED_MODULES");
     if (find != config.cend()) { _requested_modules = parse(trim(find->second), true); return; }
 

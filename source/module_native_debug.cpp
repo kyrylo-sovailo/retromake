@@ -46,13 +46,13 @@ void rm::NativeDebugModule::pre_work(RetroMake *system)
 
 void rm::NativeDebugModule::post_work(RetroMake *system)
 {
-    const std::string vscode_directory = system->source_directory + "/.vscode";
+    const std::string vscode_directory = system->source_directory + ".vscode/";
     if (!directory_exists(vscode_directory, nullptr))
     {
         if (mkdir(vscode_directory.c_str(), 0700) != 0) throw std::runtime_error("Failed to create directory " + vscode_directory);
     }
 
-    const std::string tasks_file = vscode_directory + "/launch.json";
+    const std::string tasks_file = vscode_directory + "launch.json";
     const std::string content = 
     "{\n"
     "    \"configurations\":\n"

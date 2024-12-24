@@ -2,6 +2,9 @@
 #include "../include/retromake.h"
 #include "../include/util.h"
 
+#include <rapidjson/document.h>
+#include <rapidjson/writer.h>
+#include <rapidjson/stringbuffer.h>
 #include <sys/stat.h>
 
 #include <stdexcept>
@@ -48,13 +51,13 @@ void rm::VSCodiumModule::pre_work(RetroMake *system)
 
 void rm::VSCodiumModule::post_work(RetroMake *system)
 {
-    const std::string vscode_directory = system->source_directory + "/.vscode";
+    const std::string vscode_directory = system->source_directory + ".vscode/";
     if (!directory_exists(vscode_directory, nullptr))
     {
         if (mkdir(vscode_directory.c_str(), 0700) != 0) throw std::runtime_error("Failed to create directory " + vscode_directory);
     }
 
-    const std::string tasks_file = vscode_directory + "/tasks.json";
+    const std::string tasks_file = vscode_directory + "tasks.json";
     const std::string content = 
     "{\n"
     "    \"tasks\":\n"
