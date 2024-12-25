@@ -1,6 +1,5 @@
 #include "../include/module_vscodium.h"
 #include "../include/retromake.h"
-#include "../include/util.h"
 
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
@@ -13,7 +12,28 @@
 #include <fstream>
 #include <stdexcept>
 
-bool rm::VSCodiumModule::_checkout_string(JSONValue &string, JSONAllocator &allocator, const char *value)
+bool rm::VSCodiumModule::_read_document(JSONDocument &document) const
+{
+    //Read file
+    const std::string tasks_file = _system->source_directory + ".vscode/tasks.json";
+    if (!path_exists(tasks_file, false, nullptr)) return true;
+    std::string content;
+    {
+        std::ifstream file(tasks_file, std::ios::binary);
+        if (!file.is_open()) return true;
+        file.seekg(0, std::ios::end);
+        content.resize(file.tellg());
+        file.seekg(0, std::ios::beg);
+        if (!file.read(&content[0], content.size())) throw std::runtime_error("Failed to read file " + tasks_file);
+    }
+
+    //Parse file
+    try { document.Parse(content.c_str()); }
+    catch(...) { throw std::runtime_error("Failed to parse JSON file " + tasks_file); }
+    return false;
+}
+
+bool rm::VSCodiumModule::_checkout_string(JSONValue &string, JSONAllocator &allocator, const char *value) const
 {
     if (!string.IsString() || std::strcmp(string.GetString(), value) != 0)
     {
@@ -23,14 +43,14 @@ bool rm::VSCodiumModule::_checkout_string(JSONValue &string, JSONAllocator &allo
     return false;
 }
 
-bool rm::VSCodiumModule::_checkout_args(JSONValue &args, JSONAllocator &allocator)
+bool rm::VSCodiumModule::_checkout_args(JSONValue &args, JSONAllocator &allocator) const
 {
     bool change = false;
     if (!args.IsArray() || args.GetArray().Size() != 2)
     {
         args.SetArray();
-        args.PushBack(rapidjson::Value("-c", allocator), allocator);
-        args.PushBack(rapidjson::Value("cmake --build .", allocator), allocator);
+        args.PushBack(JSONValue("-c", allocator), allocator);
+        args.PushBack(JSONValue("cmake --build .", allocator), allocator);
         change = true;
     }
     else
@@ -43,13 +63,13 @@ bool rm::VSCodiumModule::_checkout_args(JSONValue &args, JSONAllocator &allocato
     return change;
 }
 
-bool rm::VSCodiumModule::_checkout_options(JSONValue &options, JSONAllocator &allocator)
+bool rm::VSCodiumModule::_checkout_options(JSONValue &options, JSONAllocator &allocator) const
 {
     bool change = false;
     if (!options.IsObject() || options.MemberCount() != 1 || std::strcmp(options.MemberBegin()->name.GetString(), "cwd") != 0)
     {
         options.SetObject();
-        options.AddMember("cwd", rapidjson::Value(_system->binary_directory.c_str(), allocator), allocator);
+        options.AddMember("cwd", JSONValue(_system->binary_directory.c_str(), allocator), allocator);
         change = true;
     }
     else
@@ -60,21 +80,28 @@ bool rm::VSCodiumModule::_checkout_options(JSONValue &options, JSONAllocator &al
     return change;
 }
 
-bool rm::VSCodiumModule::_checkout_task(JSONValue &task, JSONAllocator &allocator)
+bool rm::VSCodiumModule::_checkout_task(JSONValue &task, JSONAllocator &allocator) const
 {
     bool change = false;
-    if (!task.HasMember("label")) { task.AddMember("label", rapidjson::Value(rapidjson::kStringType), allocator); change = true; }
+    //label
+    if (!task.HasMember("label")) { task.AddMember("label", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= _checkout_string(task["label"], allocator, "retromake-build-task");
+    //type
+    if (!task.HasMember("type")) { task.AddMember("type", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= _checkout_string(task["type"], allocator, "shell");
+    //command
+    if (!task.HasMember("command")) { task.AddMember("command", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= _checkout_string(task["command"], allocator, "/bin/sh");
-    if (!task.HasMember("args")) { task.AddMember("args", rapidjson::Value(rapidjson::kArrayType), allocator); change = true; }
+    //args
+    if (!task.HasMember("args")) { task.AddMember("args", JSONValue(rapidjson::kArrayType), allocator); change = true; }
     change |= _checkout_args(task["args"], allocator);
-    if (!task.HasMember("options")) { task.AddMember("options", rapidjson::Value(rapidjson::kObjectType), allocator); change = true; }
+    //options
+    if (!task.HasMember("options")) { task.AddMember("options", JSONValue(rapidjson::kObjectType), allocator); change = true; }
     change |= _checkout_options(task["options"], allocator);
     return change;
 }
 
-bool rm::VSCodiumModule::_checkout_tasks(JSONValue &tasks, JSONAllocator &allocator)
+bool rm::VSCodiumModule::_checkout_tasks(JSONValue &tasks, JSONAllocator &allocator) const
 {
     bool change = false;
     if (!tasks.IsArray()) { tasks.SetArray(); change = true; }
@@ -82,54 +109,23 @@ bool rm::VSCodiumModule::_checkout_tasks(JSONValue &tasks, JSONAllocator &alloca
     {
         if (!task->IsObject()) continue;
         if (!task->HasMember("label")) continue;
-        if (!(*task)["label"].IsString()) continue;
-        if (std::strcmp((*task)["label"].GetString(), "retromake-build-task") != 0) continue;
+        JSONValue &label = (*task)["label"];
+        if (!label.IsString() || std::strcmp(label.GetString(), "retromake-build-task") != 0) continue;
         change |= _checkout_task((*task), allocator);
         return change;
     }
-    rapidjson::Value task = rapidjson::Value(rapidjson::kObjectType);
+    JSONValue task = JSONValue(rapidjson::kObjectType);
     _checkout_task(task, allocator);
     return true;
 }
 
-bool rm::VSCodiumModule::_checkout_document(JSONValue &document, JSONAllocator &allocator)
+bool rm::VSCodiumModule::_checkout_document(JSONValue &document, JSONAllocator &allocator) const
 {
     bool change = false;
     if (!document.IsObject()) { document.SetObject(); change = true; }
-    if (!document.HasMember("tasks")) { document.AddMember("tasks", rapidjson::Value(rapidjson::kArrayType), allocator); change = true; }
+    if (!document.HasMember("tasks")) { document.AddMember("tasks", JSONValue(rapidjson::kArrayType), allocator); change = true; }
     change |= _checkout_tasks(document["tasks"], allocator);
     return change;
-}
-
-bool rm::VSCodiumModule::_read_document(JSONDocument &document)
-{
-    //Create directory
-    const std::string vscode_directory = _system->source_directory + ".vscode/";
-    const std::string tasks_file = vscode_directory + "tasks.json";
-    if (!directory_exists(vscode_directory, nullptr))
-    {
-        if (mkdir(vscode_directory.c_str(), 0700) != 0) throw std::runtime_error("Failed to create directory " + vscode_directory);
-        return true;
-    }
-
-    //Read file
-    std::ifstream file(tasks_file, std::ios::binary);
-    if (!file.is_open()) return true;
-    file.seekg(0, std::ios::end);
-    std::string content; content.resize(file.tellg());
-    file.seekg(0, std::ios::beg);
-    if (!file.read(&content[0], content.size())) throw std::runtime_error("Failed to read file " + tasks_file);
-
-    //Parse file
-    try
-    {
-        document.Parse(content.c_str());
-    }
-    catch(...)
-    {
-        throw std::runtime_error("Failed to parse JSON file " + tasks_file);
-    }
-    return false;
 }
 
 rm::Module *rm::VSCodiumModule::create_module(const std::string &requested_module)
@@ -196,8 +192,8 @@ void rm::VSCodiumModule::post_work(RetroMake *system)
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
     document.Accept(writer);
 
-    const std::string vscode_directory = _system->source_directory + ".vscode/";
-    const std::string tasks_file = vscode_directory + "tasks.json";
+    const std::string tasks_file = _system->source_directory + ".vscode/tasks.json";
+    path_ensure(tasks_file, false, 2);
     std::ofstream file(tasks_file, std::ios::binary);
     if (!file.write(buffer.GetString(), buffer.GetSize())) throw std::runtime_error("Failed to write file " + tasks_file);
 }

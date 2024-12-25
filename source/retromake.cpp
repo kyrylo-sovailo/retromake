@@ -7,12 +7,7 @@
 #include "../include/module_vscode.h"
 #include "../include/module_vscodium.h"
 
-#include <dirent.h>
 #include <dlfcn.h>
-#include <limits.h>
-#include <pwd.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <cstring>
@@ -64,35 +59,26 @@ std::vector<rm::CreateModule*> rm::RetroMake::_load_module_functions()
     module_functions.push_back(VSCodiumModule::create_module);
 
     //External modules
-    std::string executable_directory(256, '\0');
+    std::string executable_directory = path_executable();
+    path_parent(&executable_directory);
+    const size_t executable_directory_size = executable_directory.size();
+    Search search(executable_directory);
     while (true)
     {
-        int read = readlink("/proc/self/exe", &executable_directory[0], executable_directory.size());
-        if (read < 0) throw std::runtime_error("readlink(\"/proc/self/exe\") failed");
-        else if (read == executable_directory.size()) executable_directory.resize(executable_directory.size() * 2);
-        else { executable_directory.resize(read); break; }
-    }
-    auto slash = executable_directory.rfind('/');
-    if (slash == std::string::npos) throw std::runtime_error("readlink(\"/proc/self/exe\") returned unexpected path");
-    executable_directory.resize(slash + 1);
-    DIR *directory = opendir(executable_directory.c_str());
-    if (directory == nullptr) throw std::runtime_error("opendir() failed");
-    while (true)
-    {
-        struct dirent *entry = readdir(directory);
+        bool directory;
+        const char *entry = search.get(&directory);
         if (entry == nullptr) break;
-        if (entry->d_type != DT_REG) continue;
-        if (strlen(entry->d_name) < 4 || std::memcmp(entry->d_name + strlen(entry->d_name) - 3, ".so", 3) != 0) continue;
-        executable_directory.resize(slash + 1);
-        executable_directory += entry->d_name;
+        if (directory) continue;
+        if (std::strlen(entry) < 4 || std::memcmp(entry + strlen(entry) - 3, ".so", 3) != 0) continue;
+        executable_directory.resize(executable_directory_size);
+        executable_directory += entry;
         void *handle = dlopen(executable_directory.c_str(), RTLD_NOW);
-        if (handle == nullptr) { std::cerr << "RetroMake Warning: failed to open module " << entry->d_name << std::endl; continue; }
+        if (handle == nullptr) { std::cerr << "RetroMake Warning: failed to open module " << entry << std::endl; continue; }
         void *create_module = dlsym(handle, "create_module");
-        if (create_module == nullptr) { std::cerr << "RetroMake Warning: failed to find \"create_module\" in module " << entry->d_name << std::endl; continue; }
-        std::cerr << "RetroMake Info: loading external module " << entry->d_name << std::endl;
+        if (create_module == nullptr) { std::cerr << "RetroMake Warning: failed to find \"create_module\" in module " << entry << std::endl; continue; }
+        std::cerr << "RetroMake Info: loading external module " << entry << std::endl;
         module_functions.push_back(reinterpret_cast<CreateModule*>(create_module));
     }
-    closedir(directory);
 
     return module_functions;
 }
@@ -147,7 +133,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
             argument = arguments.erase(argument);
             if (argument == arguments.cend()) throw std::runtime_error("Expected binary directory after -B");
             if (!binary_directory.empty()) throw std::runtime_error("Multiply binary directories provided");
-            if (!directory_exists(*argument, &binary_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
+            if (!path_exists(*argument, true, &binary_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
             argument = arguments.erase(argument);
         }
         else if (*argument == "-S")
@@ -155,17 +141,17 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
             argument = arguments.erase(argument);
             if (argument == arguments.cend()) throw std::runtime_error("Expected source directory after -S");
             if (!source_directory.empty()) throw std::runtime_error("Multiply source directories provided");
-            if (!directory_exists(*argument, &source_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
+            if (!path_exists(*argument, true, &source_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
             argument = arguments.erase(argument);
         }
         else if (argument->at(0) != '-')
         {
             std::string argument_directory;
-            if (!directory_exists(*argument, &argument_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
-            const std::string cmakelists_file = argument_directory + "/CMakeLists.txt";
-            const std::string cmakecache_file = argument_directory + "/CMakeCache.txt";
-            const bool cmakelists_exists = file_exists(cmakelists_file, nullptr);
-            const bool cmakecache_exists = file_exists(cmakecache_file, nullptr);
+            if (!path_exists(*argument, true, &argument_directory)) throw std::runtime_error("Directory " + *argument + " does not exist");
+            const std::string cmakelists_file = argument_directory + "CMakeLists.txt";
+            const std::string cmakecache_file = argument_directory + "CMakeCache.txt";
+            const bool cmakelists_exists = path_exists(cmakelists_file, false, nullptr);
+            const bool cmakecache_exists = path_exists(cmakecache_file, false, nullptr);
             if (!cmakelists_exists && !cmakecache_exists)
                 throw std::runtime_error("Could not determine whether provided directory " + *argument + " is source or binary"
                 " (contains both CMakeLists.txt and CMakeCache.txt)");
@@ -191,21 +177,10 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
     }
 
     //Did not get binary directory, assume CWD
-    if (!source_directory.empty() && binary_directory.empty())
-    {
-        binary_directory.resize(256);
-        while (true)
-        {
-            char *cwd = getcwd(&binary_directory[0], binary_directory.size());
-            if (cwd == nullptr) binary_directory.resize(binary_directory.size() * 2);
-            else { binary_directory.resize(strlen(binary_directory.c_str())); break; }
-        }
-        if (binary_directory.back() != '/') binary_directory.push_back('/');
-    }
+    if (!source_directory.empty() && binary_directory.empty()) binary_directory = path_working_directory();
 
     //Failure
-    if (source_directory.empty() || binary_directory.empty())
-        throw std::runtime_error("No source or binary directory provided");
+    if (source_directory.empty() || binary_directory.empty()) throw std::runtime_error("No source or binary directory provided");
 
     return Mode::normal;
 }
@@ -237,15 +212,14 @@ void rm::RetroMake::_read_configuration()
     //Check home directory
     find = environment.find("HOME");
     std::string home_directory;
-    if (find != environment.cend()) home_directory = find->second;
+    if (find != environment.cend())
+    {
+        if (!path_exists(find->second, true, &home_directory)) throw std::runtime_error("Home directory " + find->second + " does not exist");
+    }
     else
     {
-        struct passwd *user = getpwuid(getuid());
-        if (user == nullptr) throw std::runtime_error("getpwuid() failed");
-        home_directory = user->pw_dir;
+        home_directory = path_user_directory();
     }
-    if (home_directory.empty()) throw std::runtime_error("Invalid home directory");
-    else if (home_directory.back() != '/') home_directory += '/';
     const std::string config_file = home_directory + ".retromake.conf";
     auto config = parse_config(config_file);
     find = config.find("RETROMAKE_REQUESTED_MODULES");
@@ -260,11 +234,9 @@ void rm::RetroMake::_read_configuration()
 
 void rm::RetroMake::_call_passthrough()
 {
-    std::vector<char*> argv; argv.reserve(arguments.size());
-    for (auto argument = arguments.begin(); argument != arguments.end(); argument++)
-        argv.push_back(&argument->at(0));
-    execv("cmake", argv.data());
-    throw std::runtime_error("execv() failed"); //Never happens
+    std::vector<std::string> argv{"cmake"};
+    argv.insert(argv.end(), arguments.cbegin(), arguments.cend());
+    call_no_return(argv, nullptr);
 }
 
 const char *help1 =
@@ -320,12 +292,8 @@ void rm::RetroMake::_print_version()
 
 void rm::RetroMake::_print_cmake_help()
 {
-    char argv0[] = "cmake";
-    char argv1[] = "--help";
-    char *argv[] = { argv0, argv1, nullptr };
-    execvp("cmake", argv);
-    throw std::runtime_error("execvpe() failed"); //Never happens
-    std::cout << version << std::endl;
+    std::vector<std::string> argv{"cmake", "--help"};
+    call_no_return(argv, nullptr);
 }
 
 void rm::RetroMake::_load_requested_modules()
@@ -391,38 +359,9 @@ void rm::RetroMake::_pre_work()
 
 int rm::RetroMake::_work()
 {
-    const pid_t pid = fork();
-    if (pid < 0) throw std::runtime_error("fork() failed");
-    else if (pid == 0)
-    {
-        //I am child
-        std::vector<std::string> prepand({"cmake", "-B", binary_directory, "-S", source_directory});
-        arguments.insert(arguments.begin(), prepand.cbegin(), prepand.cend());
-        std::vector<char*> argv; argv.reserve(arguments.size() + 1);
-        for (auto argument = arguments.begin(); argument != arguments.end(); argument++)
-            argv.push_back(&argument->at(0));
-        argv.push_back(nullptr);
-
-        std::vector<std::string> envp_mem; envp_mem.reserve(environment.size() + 1);
-        std::vector<char*> envp; envp.reserve(environment.size());
-        for (auto entry = environment.cbegin(); entry != environment.cend(); entry++)
-        {
-            envp_mem.push_back(entry->first + "=" + entry->second);
-            envp.push_back(&envp_mem.back().at(0));
-        }
-        envp.push_back(nullptr);
-
-        execvpe("cmake", argv.data(), envp.data());
-        throw std::runtime_error("execvpe() failed"); //Never happens
-    }
-    else
-    {
-        //I am parent
-        int status;
-        if (wait(&status) < 0) throw std::runtime_error("wait() failed");
-        if (!WIFEXITED(status)) throw std::runtime_error("wait() did not wait till child termination");
-        return WEXITSTATUS(status);
-    }
+    std::vector<std::string> arguments_copy{"cmake", "-B", binary_directory, "-S", source_directory};
+    arguments_copy.insert(arguments_copy.end(), arguments.cbegin(), arguments.cend());
+    return call_wait(arguments_copy, &environment);
 }
 
 void rm::RetroMake::_post_work()
