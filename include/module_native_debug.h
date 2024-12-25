@@ -13,7 +13,8 @@ namespace rm
             std::string path;
         };
 
-        RetroMake *_system = nullptr;
+        RetroMake *_system;
+        bool _lldb;
         std::string _get_relative_path(const std::string &absolute) const;
         bool _read_document(JSONDocument &document) const;
         std::vector<Target> _get_executable_targets() const;
@@ -26,7 +27,7 @@ namespace rm
     public:
         static Module *create_module(const std::string &requested_module);
 
-        NativeDebugModule();
+        NativeDebugModule(bool lldb);
         int order() const override;
         std::string id() const override;
         std::string name() const override;

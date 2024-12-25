@@ -142,7 +142,7 @@ rm::Module *rm::VSCodiumModule::create_module(const std::string &requested_modul
     return nullptr;
 }
 
-rm::VSCodiumModule::VSCodiumModule()
+rm::VSCodiumModule::VSCodiumModule() : _system(nullptr)
 {}
 
 int rm::VSCodiumModule::order() const

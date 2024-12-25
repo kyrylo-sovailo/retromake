@@ -168,11 +168,11 @@ bool rm::NativeDebugModule::_checkout_configuration(JSONValue &configuration, JS
     if (!configuration.HasMember("retromake_module")) { configuration.AddMember("retromake_module", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= _checkout_string(configuration["retromake_module"], allocator, "Native Debug");
     //name
-    const std::string configuration_name = target.name + " (Native Debug, GDB)";
+    const std::string configuration_name = target.name + " (Native Debug, " + (_lldb ? "LLDB-MI" : "GDB") + ")";
     if (!configuration.HasMember("name")) { configuration.AddMember("name", JSONValue(configuration_name.c_str(), allocator), allocator); change = true; }
     //type
     if (!configuration.HasMember("type")) { configuration.AddMember("type", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= _checkout_string(configuration["type"], allocator, "gdb");
+    change |= _checkout_string(configuration["type"], allocator, _lldb ? "lldb-mi" : "gdb");
     //request
     if (!configuration.HasMember("request")) { configuration.AddMember("request", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= _checkout_string(configuration["request"], allocator, "launch");
@@ -237,17 +237,25 @@ bool rm::NativeDebugModule::_checkout_document(JSONValue &document, JSONAllocato
 
 rm::Module *rm::NativeDebugModule::create_module(const std::string &requested_module)
 {
-    if (requested_module.empty()) return new NativeDebugModule();
+    if (requested_module.empty()) return new NativeDebugModule(false);
 
     std::vector<std::string> module_parse = parse(requested_module, false);
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
-    if (module_parse.size() == 1 && module_parse[0] == "webfreak") return new NativeDebugModule();
-    if (module_parse.size() == 2 && module_parse[0] == "web" && module_parse[1] == "freak") return new NativeDebugModule();
-    if (module_parse.size() == 2 && module_parse[0] == "native" && module_parse[1] == "debug") return new NativeDebugModule();
+    if (module_parse.size() == 1 && module_parse[0] == "webfreak") return new NativeDebugModule(false);
+    if (module_parse.size() == 2 && module_parse[0] == "web" && module_parse[1] == "freak") return new NativeDebugModule(false);
+    if (module_parse.size() == 2 && module_parse[0] == "native" && module_parse[1] == "debug") return new NativeDebugModule(false);
+
+    if (module_parse.size() == 2 && module_parse[0] == "webfreak" && module_parse[1] == "gdb") return new NativeDebugModule(false);
+    if (module_parse.size() == 3 && module_parse[0] == "web" && module_parse[1] == "freak" && module_parse[2] == "gdb") return new NativeDebugModule(false);
+    if (module_parse.size() == 3 && module_parse[0] == "native" && module_parse[1] == "debug" && module_parse[2] == "gdb") return new NativeDebugModule(false);
+
+    if (module_parse.size() == 2 && module_parse[0] == "webfreak" && module_parse[1] == "lldb") return new NativeDebugModule(true);
+    if (module_parse.size() == 3 && module_parse[0] == "web" && module_parse[1] == "freak" && module_parse[2] == "lldb") return new NativeDebugModule(true);
+    if (module_parse.size() == 3 && module_parse[0] == "native" && module_parse[1] == "debug" && module_parse[2] == "lldb") return new NativeDebugModule(true);
     return nullptr;
 }
 
-rm::NativeDebugModule::NativeDebugModule()
+rm::NativeDebugModule::NativeDebugModule(bool lldb) : _system(nullptr), _lldb(lldb)
 {}
 
 int rm::NativeDebugModule::order() const

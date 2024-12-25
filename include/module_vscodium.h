@@ -7,7 +7,7 @@ namespace rm
     class VSCodiumModule : public Module
     {
     private:
-        RetroMake *_system = nullptr;
+        RetroMake *_system;
         bool _read_document(JSONDocument &document) const;
         bool _checkout_string(JSONValue &string, JSONAllocator &allocator, const char *value) const;
         bool _checkout_args(JSONValue &args, JSONAllocator &allocator) const;
