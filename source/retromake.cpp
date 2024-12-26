@@ -124,7 +124,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
         {
             argument = arguments.erase(argument);
             if (argument == arguments.cend()) throw std::runtime_error("Expected list of requested modules after -G");
-            std::vector<std::string> requested_modules = parse(*argument, true);
+            std::vector<std::string> requested_modules = parse(*argument, ',');
             if (requested_modules.empty()) throw std::runtime_error("Expected list of requested modules after -G");
             for (auto requested_module = requested_modules.cbegin(); requested_module != requested_modules.cend(); requested_module++)
                 _requested_modules.push_back(trim(*requested_module));
@@ -209,7 +209,7 @@ void rm::RetroMake::_read_configuration()
     
     //Check environment
     auto find = environment.find("RETROMAKE_REQUESTED_MODULES");
-    if (find != environment.cend()) { _requested_modules = parse(trim(find->second), true); return; }
+    if (find != environment.cend()) { _requested_modules = parse(trim(find->second), ','); return; }
 
     //Check home directory
     find = environment.find("HOME");
@@ -225,11 +225,11 @@ void rm::RetroMake::_read_configuration()
     const std::string config_file = home_directory + ".retromake.conf";
     auto config = parse_config(config_file);
     find = config.find("RETROMAKE_REQUESTED_MODULES");
-    if (find != config.cend()) { _requested_modules = parse(trim(find->second), true); return; }
+    if (find != config.cend()) { _requested_modules = parse(trim(find->second), ','); return; }
 
     //Check configuration directory
     config = parse_config("/etc/retromake.conf");
-    if (find != config.cend()) { _requested_modules = parse(trim(find->second), true); return; }
+    if (find != config.cend()) { _requested_modules = parse(trim(find->second), ','); return; }
 
     throw std::runtime_error("List of requested modules not provided");
 }

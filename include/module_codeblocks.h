@@ -10,6 +10,22 @@ namespace rm
     class CodeBlocksModule : public Module
     {
     public:
+        struct Checkout
+        {
+            const CodeBlocksModule &owner;
+            XMLDocument &document;
+            bool change;
+
+            Checkout(const CodeBlocksModule &owner, XMLDocument &document);
+            XMLNode *create_node(XMLNode *parent, const char *name);
+            XMLNode *create_node(XMLNode *parent, const char *name, const char *attribute_name);
+            XMLNode *create_node(XMLNode *parent, const char *name, const char *attribute_name, const char *attribute_value);
+            void checkout_attribute(XMLNode *node, const char *attribute_name, const char *attribute_value);
+            void checkout_target(XMLNode *target_node, const Target &target);
+            void checkout_build(XMLNode *build_node, const std::vector<Target> &targets);
+            void checkout_document(const std::vector<Target> &targets, const Project &project);
+        };
+
         static Module *create_module(const std::string &requested_module);
 
         CodeBlocksModule();

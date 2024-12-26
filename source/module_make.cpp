@@ -6,7 +6,7 @@ rm::Module *rm::MakeModule::create_module(const std::string &requested_module)
 {
     if (requested_module.empty()) return new MakeModule();
 
-    std::vector<std::string> module_parse = parse(requested_module, false);
+    std::vector<std::string> module_parse = parse(requested_module, '\0');
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "make") return new MakeModule();
     if (module_parse.size() == 1 && module_parse[0] == "makefile") return new MakeModule();

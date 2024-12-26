@@ -57,7 +57,7 @@ void rm::NativeDebugModule::Checkout::checkout_configurations(JSONValue &configu
     for (auto target = targets.cbegin(); target != targets.cend(); target++)
     {
         bool target_exists = false;
-        for (auto configuration = configurations.Begin(); configuration != configurations.End(); configuration++)
+        for (auto configuration = configurations.Begin(); configuration != configurations.End() && !target_exists; configuration++)
         {
             if (!configuration->IsObject()) continue;
             if (!configuration->HasMember("type")) continue;
@@ -71,7 +71,6 @@ void rm::NativeDebugModule::Checkout::checkout_configurations(JSONValue &configu
             if (!request.IsString() || target_value.GetString() != target->path) continue;
             target_exists = true;
             checkout_configuration(*configuration, *target, false);
-            break;
         }
         if (!target_exists)
         {
@@ -94,7 +93,7 @@ rm::Module *rm::NativeDebugModule::create_module(const std::string &requested_mo
 {
     if (requested_module.empty()) return new NativeDebugModule(false);
 
-    std::vector<std::string> module_parse = parse(requested_module, false);
+    std::vector<std::string> module_parse = parse(requested_module, '\0');
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "webfreak") return new NativeDebugModule(false);
     if (module_parse.size() == 2 && module_parse[0] == "web" && module_parse[1] == "freak") return new NativeDebugModule(false);

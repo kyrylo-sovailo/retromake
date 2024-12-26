@@ -7,7 +7,7 @@ rm::Module *rm::VSCodeModule::create_module(const std::string &requested_module)
 {
     if (requested_module.empty()) return new VSCodeModule();
 
-    std::vector<std::string> module_parse = parse(requested_module, false);
+    std::vector<std::string> module_parse = parse(requested_module, '\0');
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "vscode") return new VSCodeModule();
     if (module_parse.size() == 1 && module_parse[0] == "code") return new VSCodeModule();

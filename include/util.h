@@ -24,7 +24,7 @@ namespace rm
     //Parsing
     std::string trim(const std::string &string);
     std::string lower(const std::string &string);
-    std::vector<std::string> parse(const std::string &string, bool delimiter_only_comma);
+    std::vector<std::string> parse(const std::string &string, char delimiter);
     std::map<std::string, std::string> parse_config(const std::string &path);
 
     //Filesystem
@@ -63,4 +63,5 @@ namespace rm
     //Other
     int call_wait(std::vector<std::string> &arguments, std::map<std::string, std::string> *environment);
     void call_no_return(std::vector<std::string> &arguments, std::map<std::string, std::string> *environment);
+    void remove_cmake_define(std::vector<std::string> *arguments, const char *pattern);
 }

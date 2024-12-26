@@ -1,16 +1,28 @@
 #include "../include/util.h"
 
-#include <ostream>
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 
+#include <rapidxml/rapidxml.hpp>
+namespace rapidxml { namespace internal {
+template <class OutIt, class Ch> inline OutIt print_children(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_attributes(OutIt, const xml_node<Ch>*, int);
+template <class OutIt, class Ch> inline OutIt print_data_node(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_cdata_node(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_element_node(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_declaration_node(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_comment_node(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_doctype_node(OutIt, const xml_node<Ch>*, int, int);
+template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_node<Ch>*, int, int);
+} }
+#include <rapidxml/rapidxml_print.hpp>
+
 #include <dirent.h>
 #include <limits.h>
 #include <pwd.h>
-#include <rapidxml/rapidxml_print.hpp>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -37,14 +49,14 @@ std::string rm::lower(const std::string &string)
     return lower;
 }
 
-std::vector<std::string> rm::parse(const std::string &string, bool delimiter_only_comma)
+std::vector<std::string> rm::parse(const std::string &string, char delimiter)
 {
     std::vector<std::string> result;
     bool request_new = true;
     for (auto ci = string.cbegin(); ci != string.cend(); ci++)
     {
         const char c = *ci;
-        if (c == ',' || (!delimiter_only_comma && !std::isalnum(c)))
+        if (c == delimiter || (delimiter == '\0' && !std::isalnum(c)))
         {
             request_new = true;
         }
@@ -405,5 +417,33 @@ void rm::call_no_return(std::vector<std::string> &arguments, std::map<std::strin
 
         execvpe(argv[0], argv.data(), envp.data());
         throw std::runtime_error("execvpe() failed");
+    }
+}
+
+void rm::remove_cmake_define(std::vector<std::string> *arguments, const char *pattern)
+{
+    for (auto argument = arguments->begin(); argument != arguments->end(); /*argument++*/)
+    {
+        if (*argument == "-D")
+        {
+            auto current = argument;
+            current++;
+            if (current != arguments->end() && std::strncmp(current->c_str(), pattern, std::strlen(pattern)) == 0)
+            {
+                argument = arguments->erase(argument);
+                argument = arguments->erase(argument);
+            }
+            else
+            {
+                argument++;
+                argument++;
+            }
+        }
+        else if (std::strncmp(argument->c_str(), "-D", 2) == 0
+        && std::strncmp(argument->c_str() + 2, pattern, std::strlen(pattern)) == 0)
+        {
+            argument = arguments->erase(argument);
+        }
+        else argument++;
     }
 }

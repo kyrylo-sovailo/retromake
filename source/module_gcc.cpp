@@ -4,29 +4,8 @@
 
 void rm::GCCModule::_delete_compiler_arguments(RetroMake *system)
 {
-    for (auto argument = system->arguments.begin(); argument != system->arguments.end(); /*argument++*/)
-    {
-        if (*argument == "-D")
-        {
-            auto current = argument;
-            current++;
-            if (current != system->arguments.end() && (current->find("CMAKE_C_COMPILER=") == 0 || current->find("CMAKE_CXX_COMPILER=") == 0))
-            {
-                argument = system->arguments.erase(argument);
-                argument = system->arguments.erase(argument);
-            }
-            else
-            {
-                argument++;
-                argument++;
-            }
-        }
-        else if (argument->find("-DCMAKE_C_COMPILER=") == 0 && argument->find("-DCMAKE_CXX_COMPILER=") == 0)
-        {
-            argument = system->arguments.erase(argument);
-        }
-        else argument++;
-    }
+    remove_cmake_define(&system->arguments, "CMAKE_C_COMPILER=");
+    remove_cmake_define(&system->arguments, "CMAKE_CXX_COMPILER=");
 }
 
 void rm::GCCModule::_delete_compiler_environemnt(RetroMake *system)
@@ -41,7 +20,7 @@ rm::Module *rm::GCCModule::create_module(const std::string &requested_module)
 {
     if (requested_module.empty()) return new GCCModule();
 
-    std::vector<std::string> module_parse = parse(requested_module, false);
+    std::vector<std::string> module_parse = parse(requested_module, '\0');
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "gcc") return new GCCModule();
     if (module_parse.size() == 1 && module_parse[0] == "g++") return new GCCModule();

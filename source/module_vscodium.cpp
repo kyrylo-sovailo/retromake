@@ -64,7 +64,7 @@ void rm::VSCodiumModule::Checkout::checkout_tasks(JSONValue &tasks)
 {
     if (!tasks.IsArray()) { tasks.SetArray(); change = true; }
     bool task_exists = false;
-    for (auto task = tasks.Begin(); task != tasks.End(); task++)
+    for (auto task = tasks.Begin(); task != tasks.End() && !task_exists; task++)
     {
         if (!task->IsObject()) continue;
         if (!task->HasMember("label")) continue;
@@ -72,7 +72,6 @@ void rm::VSCodiumModule::Checkout::checkout_tasks(JSONValue &tasks)
         if (!label.IsString() || std::strcmp(label.GetString(), "retromake-build-task") != 0) continue;
         task_exists = true;
         checkout_task((*task));
-        break;
     }
     if (!task_exists)
     {
@@ -94,7 +93,7 @@ rm::Module *rm::VSCodiumModule::create_module(const std::string &requested_modul
 {
     if (requested_module.empty()) return new VSCodiumModule();
 
-    std::vector<std::string> module_parse = parse(requested_module, false);
+    std::vector<std::string> module_parse = parse(requested_module, '\0');
     for (auto module = module_parse.begin(); module != module_parse.end(); module++) *module = lower(trim(*module));
     if (module_parse.size() == 1 && module_parse[0] == "vscodium") return new VSCodiumModule();
     if (module_parse.size() == 1 && module_parse[0] == "codium") return new VSCodiumModule();
