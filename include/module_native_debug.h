@@ -1,5 +1,6 @@
 #pragma once
 #include "module.h"
+#include "codemodel.h"
 #include "util.h"
 
 namespace rm
@@ -7,22 +8,20 @@ namespace rm
     class NativeDebugModule : public Module
     {
     private:
-        struct Target
+        struct Checkout
         {
-            std::string name;
-            std::string path;
+            const NativeDebugModule &owner;
+            JSONAllocator &allocator;
+            bool change;
+            
+            Checkout(const NativeDebugModule &owner, JSONAllocator &allocator);
+            void checkout_debugger_args(JSONValue &debugger_args, const Target &target, bool creation);
+            void checkout_configuration(JSONValue &configuration, const Target &target, bool creation);
+            void checkout_configurations(JSONValue &configurations, const std::vector<Target> &targets);
+            void checkout_document(JSONValue &document, const std::vector<Target> &targets);
         };
 
-        RetroMake *_system;
         bool _lldb;
-        std::string _get_relative_path(const std::string &absolute) const;
-        bool _read_document(JSONDocument &document) const;
-        std::vector<Target> _get_executable_targets() const;
-        bool _checkout_string(JSONValue &string, JSONAllocator &allocator, const char *value) const;
-        bool _checkout_debugger_args(JSONValue &debugger_args, JSONAllocator &allocator, const Target &target, bool creation) const;
-        bool _checkout_configuration(JSONValue &configuration, JSONAllocator &allocator, const Target &target, bool creation) const;
-        bool _checkout_configurations(JSONValue &configurations, JSONAllocator &allocator, const std::vector<Target> &targets) const;
-        bool _checkout_document(JSONValue &document, JSONAllocator &allocator, const std::vector<Target> &targets) const;
 
     public:
         static Module *create_module(const std::string &requested_module);

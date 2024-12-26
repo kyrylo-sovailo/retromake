@@ -7,14 +7,21 @@ namespace rm
     class VSCodiumModule : public Module
     {
     private:
+        struct Checkout
+        {
+            const VSCodiumModule &owner;
+            JSONAllocator &allocator;
+            bool change;
+            
+            Checkout(const VSCodiumModule &owner, JSONAllocator &allocator);
+            void checkout_args(JSONValue &args);
+            void checkout_options(JSONValue &options);
+            void checkout_task(JSONValue &task);
+            void checkout_tasks(JSONValue &tasks);
+            void checkout_document(JSONValue &document);
+        };
+
         RetroMake *_system;
-        bool _read_document(JSONDocument &document) const;
-        bool _checkout_string(JSONValue &string, JSONAllocator &allocator, const char *value) const;
-        bool _checkout_args(JSONValue &args, JSONAllocator &allocator) const;
-        bool _checkout_options(JSONValue &options, JSONAllocator &allocator) const;
-        bool _checkout_task(JSONValue &task, JSONAllocator &allocator) const;
-        bool _checkout_tasks(JSONValue &tasks, JSONAllocator &allocator) const;
-        bool _checkout_document(JSONValue &document, JSONAllocator &allocator) const;
     
     public:
         static Module *create_module(const std::string &requested_module);

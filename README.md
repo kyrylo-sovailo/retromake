@@ -40,8 +40,8 @@ RetroMake is aware has following modules built-in:
 9.  Visual Studio (alias: VS) :x:
   - Occupied slots: compiler, build system, text editor, intellisense, debugger
   - Dependencies: none
-10. Code::Blocks (alias: Codeblocks) :x:
-  - Occupied slots: compiler, build system, text editor, intellisense, debugger
+10. Code::Blocks (alias: CodeBlocks) :white_check_mark:
+  - Occupied slots: build system, text editor, intellisense, debugger
   - Dependencies: none
 When creating a project, you need to specify all desired functionality in the `-G` parameter, comma-separated. For example:
 ```

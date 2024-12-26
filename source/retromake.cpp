@@ -1,6 +1,7 @@
 #include "../include/retromake.h"
 #include "../include/util.h"
 #include "../include/module_clang.h"
+#include "../include/module_codeblocks.h"
 #include "../include/module_gcc.h"
 #include "../include/module_make.h"
 #include "../include/module_native_debug.h"
@@ -52,6 +53,7 @@ std::vector<rm::CreateModule*> rm::RetroMake::_load_module_functions()
     //Built-in modules
     std::vector<CreateModule*> module_functions;
     module_functions.push_back(ClangModule::create_module);
+    module_functions.push_back(CodeBlocksModule::create_module);
     module_functions.push_back(GCCModule::create_module);
     module_functions.push_back(MakeModule::create_module);
     module_functions.push_back(NativeDebugModule::create_module);
