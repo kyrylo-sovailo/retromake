@@ -40,6 +40,7 @@ namespace rm
     std::string path_working_directory();
     std::string path_user_directory();
     std::string path_relative(const std::string &target, const std::string &base, size_t *depth);
+    std::string path_base(const std::string &path);
     void path_parent(std::string *path);
     void path_append(std::string *path, const std::string &path2, bool is_directory);
     bool path_exists(const std::string &path, bool is_directory, std::string *absolute_path);

@@ -35,10 +35,11 @@ template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_nod
 
 std::string rm::trim(const std::string &string)
 {
+    std::string debug = string;
     size_t begin = 0;
-    while ((string[begin] == ' ' || string[begin] == '\t' || string[begin] == '\r' || string[begin] == '\n') && begin < string.size()) begin++;
+    while (begin < string.size() && (string[begin] == ' ' || string[begin] == '\t' || string[begin] == '\r' || string[begin] == '\n')) begin++;
     size_t end = string.size();
-    while ((string[end-1] == ' ' || string[end-1] == '\t' || string[end-1] == '\r' || string[end-1] == '\n') && end > begin) end--;
+    while (end > begin && (string[end-1] == ' ' || string[end-1] == '\t' || string[end-1] == '\r' || string[end-1] == '\n')) end--;
     return string.substr(begin, end - begin);
 }
 
@@ -221,6 +222,17 @@ std::string rm::path_relative(const std::string &target, const std::string &base
     return relative + (target.c_str() + i);
 }
 
+std::string rm::path_base(const std::string &path)
+{
+    if (path.empty()) throw std::runtime_error("Could not find base name of " + path);
+    auto slash = path.rfind('/', path.size() - 1);
+    if (slash == std::string::npos) slash = 0;
+    else slash++;
+    auto dot = path.find('.', slash);
+    if (dot == std::string::npos) dot = path.size();
+    return path.substr(slash, dot - slash);
+}
+
 void rm::path_parent(std::string *path)
 {
     if (path->empty()) throw std::runtime_error("Could not step back from " + *path);
@@ -232,7 +244,7 @@ void rm::path_parent(std::string *path)
 void rm::path_append(std::string *path, const std::string &path2, bool is_directory)
 {
     if (path2.empty()) {}
-    else if (path2.front() == '/') *path = path2;
+    else if (path2.front() == '/') *path = path2; //Unix Specific
     else
     {
         size_t i = 0;
@@ -243,7 +255,7 @@ void rm::path_append(std::string *path, const std::string &path2, bool is_direct
             if (i + 1 == slash) {}
             else if (i + 2 == slash && path2[i+1] == '.') {}
             else if (i + 3 == slash && path2[i+1] == '.' && path2[i+2] == '.') path_parent(path);
-            else path->insert(path->end(), path2.cbegin(), path2.cbegin() + slash - i);
+            else path->insert(path->end(), path2.cbegin() + i, path2.cbegin() + slash);
             i = slash;
         }
     }
@@ -348,7 +360,7 @@ bool rm::document_read(XMLDocument &document, const std::string &path)
     }
 
     //Parse file
-    try { document.parse<0>(&content[0]); }
+    try { document.parse<rapidxml::parse_full>(&content[0]); }
     catch(...) { throw std::runtime_error("Failed to parse XML file " + path); }
     return true;
 }

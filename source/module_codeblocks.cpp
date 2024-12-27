@@ -22,6 +22,7 @@ template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_nod
 #include <rapidxml/rapidxml_print.hpp>
 
 #include <cstring>
+#include <iostream>
 
 rm::CodeBlocksModule::Checkout::Checkout(const CodeBlocksModule &owner, XMLDocument &document, const std::string &compiler)
     : owner(owner), document(document), compiler(compiler), change(false) {}
@@ -31,7 +32,7 @@ rm::XMLNode *rm::CodeBlocksModule::Checkout::create_node(XMLNode *parent, const 
     auto child = parent->first_node(name);
     if (child == nullptr || child->type() != rapidxml::node_element)
     {
-        if (child == nullptr) parent->remove_node(child);
+        if (child != nullptr) parent->remove_node(child);
         child = document.allocate_node(rapidxml::node_element, name);
         parent->append_node(child);
         change = true;
@@ -76,7 +77,8 @@ rm::XMLNode *rm::CodeBlocksModule::Checkout::create_node(XMLNode *parent, const 
     {
         child = document.allocate_node(rapidxml::node_element, name);
         parent->append_node(child);
-        auto attribute = document.allocate_attribute(attribute_name, attribute_value);
+        const char *attribute_value_copy = document.allocate_string(attribute_value);
+        auto attribute = document.allocate_attribute(attribute_name, attribute_value_copy);
         child->append_attribute(attribute);
         change = true;
     }
@@ -88,17 +90,22 @@ void rm::CodeBlocksModule::Checkout::checkout_attribute(XMLNode *node, const cha
     auto attribute = node->first_attribute(attribute_name);
     if (attribute != nullptr && std::strcmp(attribute->value(), attribute_value) == 0) return;
     if (attribute != nullptr) node->remove_attribute(attribute);
-    attribute = document.allocate_attribute(attribute_name, attribute_value);
+    const char *attribute_value_copy = document.allocate_string(attribute_value);
+    attribute = document.allocate_attribute(attribute_name, attribute_value_copy);
     node->append_attribute(attribute);
     change = true;
 }
 
 void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const Target &target)
 {
-    //<Option output
+    //Option output
+    std::string directory = target.path; path_parent(&directory);
+    std::string basename = path_base(target.path);
+    if ((target.typ == "STATIC_LIBRARY" || target.typ == "SHARED_LIBRARY") && (std::strncmp(basename.c_str(), "lib", 3) == 0))
+        basename.erase(0, 3);
+    
     auto option_output = create_node(target_node, "Option", "output");
-    std::string option_output_string = target.path;
-    path_parent(&option_output_string);
+    std::string option_output_string = directory + basename;
     checkout_attribute(option_output, "output", option_output_string.c_str());
     if (target.typ == "SHARED_LIBRARY")
     {
@@ -110,8 +117,8 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const
 
     //Option object_output
     auto option_object_output = create_node(target_node, "Option", "object_output");
-    std::string option_object_output_string = option_output_string;
-    auto bin = option_object_output_string.rfind("/bin/"); if (bin != std::string::npos) option_object_output_string.replace(bin, 5, "/obj/"); //TODO: INCORRECT!
+    std::string option_object_output_string = directory;
+    auto bin = option_object_output_string.rfind("bin/"); if (bin != std::string::npos) option_object_output_string.replace(bin, 4, "obj/"); //TODO: INCORRECT!
     checkout_attribute(option_object_output, "object_output", option_object_output_string.c_str());
 
     //Option type
@@ -120,13 +127,13 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const
     else if (target.typ == "SHARED_LIBRARY") checkout_attribute(create_node(target_node, "Option", "type"), "type", "3");
 
     //Option compiler
-    checkout_attribute(create_node(target_node, "Option", "compiler"), "compiler", "gcc");
+    checkout_attribute(create_node(target_node, "Option", "compiler"), "compiler", compiler.c_str());
 
     //Option createDefFile & Option createStaticLib
     if (target.typ == "SHARED_LIBRARY")
     {
-        checkout_attribute(option_output, "createDefFile", "1");
-        checkout_attribute(option_output, "createStaticLib", "1");
+        checkout_attribute(create_node(target_node, "Option", "createDefFile"), "createDefFile", "1");
+        checkout_attribute(create_node(target_node, "Option", "createStaticLib"), "createStaticLib", "1");
     }
 
     //Compiler
@@ -137,7 +144,8 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const
     }
     for (auto define = target.defines.cbegin(); define != target.defines.cend(); define++)
     {
-        std::string define_string = "-D" + define->first + "=" + define->second;
+        std::string define_string = "-D" + define->first;
+        if (!define->second.empty()) define_string += "=" + define->second;
         create_node(compiler_node, "Add", "option", define_string.c_str());
     }
     for (auto directory = target.directories.cbegin(); directory != target.directories.cend(); directory++)
@@ -161,7 +169,9 @@ void rm::CodeBlocksModule::Checkout::checkout_build(XMLNode *build_node, const s
 {
     for (auto target = targets.cbegin(); target != targets.cend(); target++)
     {
-        auto target_node = create_node(build_node, "Target", "title", target->name.c_str());
+        std::string target_title_string = target->name.c_str();
+        if (!target->configuration_name.empty()) target_title_string += '_' + target->configuration_name;
+        auto target_node = create_node(build_node, "Target", "title", target_title_string.c_str());
         checkout_target(target_node, *target);
     }
 }
@@ -174,8 +184,12 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
     {
         document.remove_all_nodes();
         declaration = document.allocate_node(rapidxml::node_declaration);
+        document.append_node(declaration);
         change = true;
     }
+    checkout_attribute(declaration, "version", "1.0");
+    checkout_attribute(declaration, "encoding", "UTF-8");
+    checkout_attribute(declaration, "standalone", "yes");
 
     //CodeBlocks_project_file
     auto root = create_node(&document, "CodeBlocks_project_file");
@@ -189,7 +203,7 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
     auto project_node = create_node(root, "Project");
     checkout_attribute(create_node(project_node, "Option", "title"), "title", project.name.c_str());
     checkout_attribute(create_node(project_node, "Option", "pch_mode"), "pch_mode", "2");
-    checkout_attribute(create_node(project_node, "Option", "compiler"), "compiler", "gcc");
+    checkout_attribute(create_node(project_node, "Option", "compiler"), "compiler", compiler.c_str());
     
     //Build
     auto build_node = create_node(project_node, "Build");
@@ -197,11 +211,26 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
 
     //VirtualTargets
     auto virtual_targets = create_node(project_node, "VirtualTargets");
-    auto add_alias_all = create_node(virtual_targets, "Add", "alias", "All");
-    std::string add_alias_all_string = "";
-    for (auto target = targets.cbegin(); target != targets.cend(); target++)
-        add_alias_all_string += target->name + ';';
-    checkout_attribute(add_alias_all, "targets", add_alias_all_string.c_str());
+    std::set<std::string> configuration_names;
+    for (auto target = targets.cbegin(); target != targets.cend(); target++) configuration_names.insert(target->configuration_name);
+    for (auto configuration_name = configuration_names.cbegin(); configuration_name != configuration_names.cend(); configuration_name++)
+    {
+        std::string add_alias_string = "all";
+        if (!configuration_name->empty()) add_alias_string += '_' + *configuration_name;
+        auto add_alias = create_node(virtual_targets, "Add", "alias", add_alias_string.c_str());
+
+        std::string add_targets_string = "";
+        for (auto target = targets.cbegin(); target != targets.cend(); target++)
+        {
+            if (target->configuration_name == *configuration_name)
+            {
+                add_targets_string += target->name;
+                if (!configuration_name->empty()) add_targets_string += '_' + *configuration_name;
+                add_targets_string += ';';
+            }
+        }
+        checkout_attribute(add_alias, "targets", add_targets_string.c_str());
+    }
 
     //Compiler
     create_node(project_node, "Compiler");
@@ -223,7 +252,9 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
         auto unit_filename = create_node(project_node, "Unit", "filename", source->first.c_str());
         for (auto target = source->second.cbegin(); target != source->second.cend(); target++)
         {
-            create_node(unit_filename, "Option", "target", (*target)->name.c_str());
+            std::string option_target_string = (*target)->name;
+            if (!(*target)->configuration_name.empty()) option_target_string += '_' + (*target)->configuration_name;
+            create_node(unit_filename, "Option", "target", option_target_string.c_str());
         }
     }
 
@@ -285,6 +316,7 @@ void rm::CodeBlocksModule::pre_work(RetroMake *system)
     remove_cmake_define(&system->arguments, "CMAKE_PDB_OUTPUT_DIRECTORY=");
     remove_cmake_define(&system->arguments, "CMAKE_RUNTIME_OUTPUT_DIRECTORY=");
     system->arguments.push_back("-G");
+    system->arguments.push_back("Ninja Multi-Config");
     system->arguments.push_back("-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=obj");
     system->arguments.push_back("-DCMAKE_COMPILE_PDB_OUTPUT_DIRECTORY=obj");
     system->arguments.push_back("-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=bin");
@@ -306,10 +338,41 @@ void rm::CodeBlocksModule::post_work(const RetroMake *system)
             sources.insert(path_relative(*source, system->binary_directory, nullptr));
         target->sources = sources;
 
-        sources.clear();
-        for (auto source = target->linker_sources.begin(); source != target->linker_sources.end(); source++)
-            sources.insert(path_relative(*source, system->binary_directory, nullptr));
-        target->linker_sources = sources;
+        if (target->configuration_name == "Debug") target->configuration_name = "deb"; //Name should be shorter then "XXXXXXXXX" (in pixels)
+        if (target->configuration_name == "Release") target->configuration_name = "rel";
+        if (target->configuration_name == "RelWithDebInfo") target->configuration_name = "rdb";
+    }
+
+    //Sort
+    std::vector<Target> sorted_targets;
+    while (true) //TODO: behold, the most inefficient algorithm in the world
+    {
+        std::vector<Target> zero_depends, nonzero_depends;
+        for (auto target = targets.begin(); target != targets.end(); target++)
+        {
+            if (target->dependencies.empty()) zero_depends.push_back(std::move(*target));
+            else nonzero_depends.push_back(std::move(*target));
+        }
+        const bool zero_depends_empty = zero_depends.empty();
+        for (auto target = zero_depends.begin(); target != zero_depends.end(); target++)
+        {
+            for (auto target2 = nonzero_depends.begin(); target2 != nonzero_depends.end(); target2++)
+            {
+                if (target->configuration_name != target2->configuration_name) continue;
+                auto find = target2->dependencies.find(target->name);
+                if (find != target2->dependencies.end()) target2->dependencies.erase(find);
+            }
+            sorted_targets.push_back(std::move(*target));
+        }
+        if (nonzero_depends.empty()) break;
+        if (zero_depends_empty)
+        {
+            std::cout << "RetroMake Warning: targets have circular dependencies" << std::endl;
+            for (auto target = nonzero_depends.begin(); target != nonzero_depends.end(); target++)
+                sorted_targets.push_back(std::move(*target));
+            break;
+        }
+        targets = nonzero_depends;
     }
 
     //Find compiler
@@ -326,11 +389,11 @@ void rm::CodeBlocksModule::post_work(const RetroMake *system)
     }
 
     //Create project
-    const std::string project_file = system->binary_directory + ".vscode/launch.json";
+    const std::string project_file = system->binary_directory + project.name + ".cbp";
     XMLDocument document;
     bool change = !document_read(document, project_file);
     Checkout checkout(*this, document, compiler);
-    checkout.checkout_document(targets, project);
+    checkout.checkout_document(sorted_targets, project);
     change |= checkout.change;
     if (change) document_write(document, project_file, 1);
 }

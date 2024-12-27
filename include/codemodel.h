@@ -15,6 +15,7 @@ namespace rm
         //General
         std::string typ;
         std::string name;
+        std::string configuration_name;
         std::string path;
         std::string language;
         std::set<std::string> dependencies;

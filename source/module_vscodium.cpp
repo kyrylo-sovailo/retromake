@@ -147,7 +147,8 @@ void rm::VSCodiumModule::post_work(const RetroMake *system)
     const std::string tasks_file = system->source_directory + ".vscode/tasks.json";
     JSONDocument document;
     bool change = !document_read(document, tasks_file);
-    Checkout checkout(system->binary_directory, document.GetAllocator());
+    const std::string binary_directory = "${workspaceFolder}/" + path_relative(system->binary_directory, system->source_directory, nullptr);
+    Checkout checkout(binary_directory, document.GetAllocator());
     checkout.checkout_document(document);
     change |= checkout.change;
     if (change) document_write(document, tasks_file, 2);

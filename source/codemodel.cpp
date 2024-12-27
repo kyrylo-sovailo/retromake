@@ -57,7 +57,6 @@ std::vector<rm::Target> rm::codemodel_parse(const std::string &binary_directory,
             const JSONValue &configuration_name_string = (*configuration)["name"];
             if (configuration_name_string.IsString()) configuration_name = configuration_name_string.GetString();
         }
-        if (!configuration_name.empty()) configuration_name = "_" + configuration_name;
 
         //Project
         if (project != nullptr)
@@ -93,22 +92,31 @@ std::vector<rm::Target> rm::codemodel_parse(const std::string &binary_directory,
             if (!target_document.HasMember("name")) continue;
             const JSONValue &name = target_document["name"];
             if (!name.IsString()) continue;
-            if (!target_document.HasMember("nameOnDisk")) continue;
-            const JSONValue &name_on_disk = target_document["nameOnDisk"];
-            if (!name_on_disk.IsString()) continue;
             if (!target_document.HasMember("paths")) continue;
             const JSONValue &paths = target_document["paths"];
             if (!paths.IsObject() || !paths.HasMember("build")) continue;
             const JSONValue &build = paths["build"];
             if (!build.IsString()) continue;
+            if (!target_document.HasMember("artifacts")) continue;
+            const JSONValue &artifacts = target_document["artifacts"];
+            if (!artifacts.IsArray()) continue;
+            const char *artifact_path = nullptr;
+            for (auto artifact = artifacts.Begin(); artifact != artifacts.End() && artifact_path == nullptr; artifact++)
+            {
+                if (!artifact->IsObject() || !artifact->HasMember("path")) continue;
+                const JSONValue &path = (*artifact)["path"];
+                if (path.IsString()) artifact_path = path.GetString();
+            }
+            if (artifact_path == nullptr) continue;
 
             result.push_back(Target());
             Target &result_target = result.back();
             result_target.typ = typ.GetString();
-            result_target.name = name.GetString() + configuration_name;
+            result_target.name = name.GetString();
+            result_target.configuration_name = configuration_name;
             result_target.path = binary_directory;
             path_append(&result_target.path, build.GetString(), true);
-            path_append(&result_target.path, name_on_disk.GetString(), false);
+            path_append(&result_target.path, artifact_path, false);
             if (!full) continue;
 
             if (target_document.HasMember("dependencies"))
@@ -208,7 +216,7 @@ std::vector<rm::Target> rm::codemodel_parse(const std::string &binary_directory,
             if (target_document.HasMember("sources"))
             {
                 const JSONValue &sources = target_document["sources"];
-                if (sources.IsArray()) for (auto source = sources.Begin(); source != sources.Begin(); source++)
+                if (sources.IsArray()) for (auto source = sources.Begin(); source != sources.End(); source++)
                 {
                     if (!source->IsObject() || !source->HasMember("compileGroupIndex") || !source->HasMember("path")) continue;
                     const JSONValue &path_string = (*source)["path"];

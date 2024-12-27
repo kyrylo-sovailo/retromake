@@ -124,10 +124,10 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
         {
             argument = arguments.erase(argument);
             if (argument == arguments.cend()) throw std::runtime_error("Expected list of requested modules after -G");
-            std::vector<std::string> requested_modules = parse(*argument, ',');
-            if (requested_modules.empty()) throw std::runtime_error("Expected list of requested modules after -G");
-            for (auto requested_module = requested_modules.cbegin(); requested_module != requested_modules.cend(); requested_module++)
-                requested_modules.push_back(trim(*requested_module));
+            std::vector<std::string> argument_modules = parse(*argument, ',');
+            if (argument_modules.empty()) throw std::runtime_error("Expected list of requested modules after -G");
+            for (auto argument_module = argument_modules.cbegin(); argument_module != argument_modules.cend(); argument_module++)
+                requested_modules.push_back(trim(*argument_module));
             argument = arguments.erase(argument);
         }
         else if (*argument == "-B")

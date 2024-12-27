@@ -153,13 +153,22 @@ void rm::NativeDebugModule::pre_work(RetroMake *system)
 
 void rm::NativeDebugModule::post_work(const RetroMake *system)
 {
+    //Parse
     std::vector<Target> targets = codemodel_parse(system->binary_directory, system->source_directory, nullptr, false);
-    for (auto target = targets.begin(); target != targets.end(); target++)
+    for (auto target = targets.begin(); target != targets.end(); /*target++*/)
     {
-        if (target->typ != "EXECUTABLE") target = targets.erase(target);
-        else target->path = "${workspaceFolder}/" + path_relative(target->path, system->source_directory, nullptr);
+        if (target->typ != "EXECUTABLE")
+        {
+            target = targets.erase(target);
+        }
+        else
+        {
+            target->path = "${workspaceFolder}/" + path_relative(target->path, system->source_directory, nullptr);
+            target++;
+        }
     }
     
+    //Checkout
     const std::string launch_file = system->source_directory + ".vscode/launch.json";
     JSONDocument document;
     bool change = !document_read(document, launch_file);

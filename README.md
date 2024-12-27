@@ -45,7 +45,7 @@ RetroMake is aware has following modules built-in:
   - Dependencies: none
 When creating a project, you need to specify all desired functionality in the `-G` parameter, comma-separated. For example:
 ```
-retromake .. -G 'GCC, Ninja, Codium, Native Debug'
+retromake .. -G 'GCC, Make, Codium, Native Debug'
 ```
 ### Dependencies
 RetroMake is built with CMake and uses CMake to parse `CMakeLists.txt`. Right now RetroMake is a mere wrapper around CMake, that hoverer will change with new modules. RetroMake also depends on RapidJSON and RapidXML.
