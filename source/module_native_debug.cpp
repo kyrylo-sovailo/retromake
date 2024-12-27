@@ -7,7 +7,7 @@
 #include <cstring>
 #include <stdexcept>
 
-rm::NativeDebugModule::Checkout::Checkout(const NativeDebugModule &owner, JSONAllocator &allocator) : owner(owner), allocator(allocator), change(false) {}
+rm::NativeDebugModule::Checkout::Checkout(bool lldb, JSONAllocator &allocator) : lldb(lldb), allocator(allocator), change(false) {}
 
 void rm::NativeDebugModule::Checkout::checkout_debugger_args(JSONValue &debugger_args, const Target &target, bool creation)
 {
@@ -29,11 +29,11 @@ void rm::NativeDebugModule::Checkout::checkout_configuration(JSONValue &configur
     if (!configuration.HasMember("retromake_module")) { configuration.AddMember("retromake_module", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= checkout_string(configuration["retromake_module"], allocator, "Native Debug");
     //name
-    const std::string configuration_name = target.name + " (Native Debug, " + (owner._lldb ? "LLDB-MI" : "GDB") + ")";
+    const std::string configuration_name = target.name + " (Native Debug, " + (lldb ? "LLDB-MI" : "GDB") + ")";
     if (!configuration.HasMember("name")) { configuration.AddMember("name", JSONValue(configuration_name.c_str(), allocator), allocator); change = true; }
     //type
     if (!configuration.HasMember("type")) { configuration.AddMember("type", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(configuration["type"], allocator, owner._lldb ? "lldb-mi" : "gdb");
+    change |= checkout_string(configuration["type"], allocator, lldb ? "lldb-mi" : "gdb");
     //request
     if (!configuration.HasMember("request")) { configuration.AddMember("request", JSONValue(rapidjson::kStringType), allocator); change = true; }
     change |= checkout_string(configuration["request"], allocator, "launch");
@@ -137,9 +137,9 @@ std::vector<std::string> rm::NativeDebugModule::slots() const
     return { "debug" };
 }
 
-void rm::NativeDebugModule::check(const std::vector<Module*> &modules) const
+void rm::NativeDebugModule::check(const RetroMake *system) const
 {
-    for (auto module = modules.cbegin(); module != modules.cend(); module++)
+    for (auto module = system->modules.cbegin(); module != system->modules.cend(); module++)
     {
         if ((*module)->id() == "vscodium" || (*module)->id() == "vscode") return;
     }
@@ -151,7 +151,7 @@ void rm::NativeDebugModule::pre_work(RetroMake *system)
     codemodel_request(system->binary_directory);
 }
 
-void rm::NativeDebugModule::post_work(RetroMake *system)
+void rm::NativeDebugModule::post_work(const RetroMake *system)
 {
     std::vector<Target> targets = codemodel_parse(system->binary_directory, system->source_directory, nullptr, false);
     for (auto target = targets.begin(); target != targets.end(); target++)
@@ -163,7 +163,7 @@ void rm::NativeDebugModule::post_work(RetroMake *system)
     const std::string launch_file = system->source_directory + ".vscode/launch.json";
     JSONDocument document;
     bool change = !document_read(document, launch_file);
-    Checkout checkout(*this, document.GetAllocator());
+    Checkout checkout(_lldb, document.GetAllocator());
     checkout.checkout_document(document, targets);
     change |= checkout.change;
     if (change) document_write(document, launch_file, 2);

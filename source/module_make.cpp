@@ -44,7 +44,7 @@ std::vector<std::string> rm::MakeModule::slots() const
     return { "build" };
 }
 
-void rm::MakeModule::check(const std::vector<Module*> &modules) const
+void rm::MakeModule::check(const RetroMake *system) const
 {
     //No additional checks
 }
@@ -55,7 +55,7 @@ void rm::MakeModule::pre_work(RetroMake *system)
     system->arguments.push_back("Unix Makefiles");
 }
 
-void rm::MakeModule::post_work(RetroMake *system)
+void rm::MakeModule::post_work(const RetroMake *system)
 {
     //Do nothing
 }

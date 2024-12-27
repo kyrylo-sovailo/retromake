@@ -23,7 +23,8 @@ template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_nod
 
 #include <cstring>
 
-rm::CodeBlocksModule::Checkout::Checkout(const CodeBlocksModule &owner, XMLDocument &document) : owner(owner), document(document), change(false) {}
+rm::CodeBlocksModule::Checkout::Checkout(const CodeBlocksModule &owner, XMLDocument &document, const std::string &compiler)
+    : owner(owner), document(document), compiler(compiler), change(false) {}
 
 rm::XMLNode *rm::CodeBlocksModule::Checkout::create_node(XMLNode *parent, const char *name)
 {
@@ -269,7 +270,7 @@ std::vector<std::string> rm::CodeBlocksModule::slots() const
     return { "build", "editor", "intellisense", "debug" };
 }
 
-void rm::CodeBlocksModule::check(const std::vector<Module*> &modules) const
+void rm::CodeBlocksModule::check(const RetroMake *system) const
 {
     //No additional checks
 }
@@ -291,8 +292,9 @@ void rm::CodeBlocksModule::pre_work(RetroMake *system)
     system->arguments.push_back("-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=bin");
 }
 
-void rm::CodeBlocksModule::post_work(RetroMake *system)
+void rm::CodeBlocksModule::post_work(const RetroMake *system)
 {
+    //Parse codemodel
     Project project;
     std::vector<Target> targets = codemodel_parse(system->binary_directory, system->source_directory, &project, true);
     for (auto target = targets.begin(); target != targets.end(); target++)
@@ -310,10 +312,24 @@ void rm::CodeBlocksModule::post_work(RetroMake *system)
         target->linker_sources = sources;
     }
 
+    //Find compiler
+    std::string compiler;
+    for (auto module = system->modules.cbegin(); module != system->modules.cend() && compiler.empty(); module++)
+    {
+        auto slots = (*module)->slots();
+        for (auto slot = slots.cbegin(); slot != slots.cend() && compiler.empty(); slot++)
+        {
+            if (*slot != "compiler") continue;
+            if ((*module)->id() == "gcc") compiler = "gcc";
+            else if ((*module)->id() == "clang") compiler = "clang";
+        }
+    }
+
+    //Create project
     const std::string project_file = system->binary_directory + ".vscode/launch.json";
     XMLDocument document;
     bool change = !document_read(document, project_file);
-    Checkout checkout(*this, document);
+    Checkout checkout(*this, document, compiler);
     checkout.checkout_document(targets, project);
     change |= checkout.change;
     if (change) document_write(document, project_file, 1);

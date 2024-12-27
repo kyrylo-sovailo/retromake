@@ -10,11 +10,11 @@ namespace rm
     private:
         struct Checkout
         {
-            const NativeDebugModule &owner;
+            bool lldb;
             JSONAllocator &allocator;
             bool change;
             
-            Checkout(const NativeDebugModule &owner, JSONAllocator &allocator);
+            Checkout(bool lldb, JSONAllocator &allocator);
             void checkout_debugger_args(JSONValue &debugger_args, const Target &target, bool creation);
             void checkout_configuration(JSONValue &configuration, const Target &target, bool creation);
             void checkout_configurations(JSONValue &configurations, const std::vector<Target> &targets);
@@ -32,8 +32,8 @@ namespace rm
         std::string name() const override;
         std::string help() const override;
         std::vector<std::string> slots() const override;
-        void check(const std::vector<Module*> &modules) const override;
+        void check(const RetroMake *system) const override;
         void pre_work(RetroMake *system) override;
-        void post_work(RetroMake *system) override;
+        void post_work(const RetroMake *system) override;
     };
 }

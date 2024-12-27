@@ -14,6 +14,8 @@ namespace rm
         std::map<std::string, std::string> environment;
         std::string source_directory;
         std::string binary_directory;
+        std::vector<std::string> requested_modules;
+        std::vector<Module*> modules;
     
     private:
         enum class Mode
@@ -24,9 +26,6 @@ namespace rm
             version,
             cmake_help
         };
-
-        std::vector<std::string> _requested_modules;
-        std::vector<Module*> _modules;
 
         static std::string _find_source_directory(const std::string &cmakecache);
         static std::vector<CreateModule*> _load_module_functions();

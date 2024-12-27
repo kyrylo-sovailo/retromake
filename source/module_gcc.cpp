@@ -55,7 +55,7 @@ std::vector<std::string> rm::GCCModule::slots() const
     return { "compiler" };
 }
 
-void rm::GCCModule::check(const std::vector<Module*> &modules) const
+void rm::GCCModule::check(const RetroMake *system) const
 {
     //No additional checks
 }
@@ -68,7 +68,7 @@ void rm::GCCModule::pre_work(RetroMake *system)
     system->arguments.push_back("-DCMAKE_CXX_COMPILER=g++");
 }
 
-void rm::GCCModule::post_work(RetroMake *system)
+void rm::GCCModule::post_work(const RetroMake *system)
 {
     //Do nothing
 }

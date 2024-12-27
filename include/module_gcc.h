@@ -18,8 +18,8 @@ namespace rm
         std::string name() const override;
         std::string help() const override;
         std::vector<std::string> slots() const override;
-        void check(const std::vector<Module*> &modules) const override;
+        void check(const RetroMake *system) const override;
         void pre_work(RetroMake *system) override;
-        void post_work(RetroMake *system) override;
+        void post_work(const RetroMake *system) override;
     };
 }

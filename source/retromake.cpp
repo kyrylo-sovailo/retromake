@@ -95,7 +95,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
     //1. Set arguments
     //2. Set source_directory
     //3. Set binary_directory
-    //4. Set _requested_modules and remove -G from arguments
+    //4. Set requested_modules and remove -G from arguments
 
     //Detect help or passthrough
     if (argc == 0) throw std::runtime_error("argc is zero");
@@ -127,7 +127,7 @@ rm::RetroMake::Mode rm::RetroMake::_parse_arguments(int argc, char **argv)
             std::vector<std::string> requested_modules = parse(*argument, ',');
             if (requested_modules.empty()) throw std::runtime_error("Expected list of requested modules after -G");
             for (auto requested_module = requested_modules.cbegin(); requested_module != requested_modules.cend(); requested_module++)
-                _requested_modules.push_back(trim(*requested_module));
+                requested_modules.push_back(trim(*requested_module));
             argument = arguments.erase(argument);
         }
         else if (*argument == "-B")
@@ -205,11 +205,11 @@ void rm::RetroMake::_parse_environment()
 void rm::RetroMake::_read_configuration()
 {
     //Check if -G argument was given
-    if (!_requested_modules.empty()) return;
+    if (!requested_modules.empty()) return;
     
     //Check environment
     auto find = environment.find("RETROMAKE_REQUESTED_MODULES");
-    if (find != environment.cend()) { _requested_modules = parse(trim(find->second), ','); return; }
+    if (find != environment.cend()) { requested_modules = parse(trim(find->second), ','); return; }
 
     //Check home directory
     find = environment.find("HOME");
@@ -225,11 +225,11 @@ void rm::RetroMake::_read_configuration()
     const std::string config_file = home_directory + ".retromake.conf";
     auto config = parse_config(config_file);
     find = config.find("RETROMAKE_REQUESTED_MODULES");
-    if (find != config.cend()) { _requested_modules = parse(trim(find->second), ','); return; }
+    if (find != config.cend()) { requested_modules = parse(trim(find->second), ','); return; }
 
     //Check configuration directory
     config = parse_config("/etc/retromake.conf");
-    if (find != config.cend()) { _requested_modules = parse(trim(find->second), ','); return; }
+    if (find != config.cend()) { requested_modules = parse(trim(find->second), ','); return; }
 
     throw std::runtime_error("List of requested modules not provided");
 }
@@ -275,7 +275,7 @@ void rm::RetroMake::_print_help()
 {
     _load_all_modules();
     std::cout << help1;
-    for (auto module = _modules.cbegin(); module != _modules.cend(); module++)
+    for (auto module = modules.cbegin(); module != modules.cend(); module++)
     {
         std::cout << "  " << std::setw(32) << std::left << (*module)->name() << "= " << (*module)->help() << '\n';
     }
@@ -302,7 +302,7 @@ void rm::RetroMake::_load_requested_modules()
 {
     auto module_functions = _load_module_functions();
 
-    for (auto requested_module = _requested_modules.cbegin(); requested_module != _requested_modules.cend(); requested_module++)
+    for (auto requested_module = requested_modules.cbegin(); requested_module != requested_modules.cend(); requested_module++)
     {
         std::unique_ptr<Module> matched_module;
         for (auto module_function = module_functions.cbegin(); module_function != module_functions.cend(); module_function++)
@@ -317,9 +317,9 @@ void rm::RetroMake::_load_requested_modules()
         }
         if (matched_module == nullptr) throw std::runtime_error(
             "String \"" + *requested_module + "\" is not matched by any module");
-        _modules.push_back(matched_module.release());
+        modules.push_back(matched_module.release());
     }
-    std::sort(_modules.begin(), _modules.end(), [](Module *a, Module *b){ return a->order() < b->order(); });
+    std::sort(modules.begin(), modules.end(), [](Module *a, Module *b){ return a->order() < b->order(); });
 }
 
 void rm::RetroMake::_load_all_modules()
@@ -327,15 +327,15 @@ void rm::RetroMake::_load_all_modules()
     auto module_functions = _load_module_functions();
     for (auto module_function = module_functions.cbegin(); module_function != module_functions.cend(); module_function++)
     {
-        _modules.push_back((*module_function)(""));
+        modules.push_back((*module_function)(""));
     }
-    std::sort(_modules.begin(), _modules.end(), [](Module *a, Module *b){ return a->order() < b->order(); });
+    std::sort(modules.begin(), modules.end(), [](Module *a, Module *b){ return a->order() < b->order(); });
 }
 
 void rm::RetroMake::_check() const
 {
     std::map<std::string, const Module*> occupied_slots;
-    for (auto module = _modules.cbegin(); module != _modules.cend(); module++)
+    for (auto module = modules.cbegin(); module != modules.cend(); module++)
     {
         const std::vector<std::string> slots = (*module)->slots();
         for (auto slot = slots.cbegin(); slot != slots.cend(); slot++)
@@ -351,12 +351,12 @@ void rm::RetroMake::_check() const
     if (occupied_slots.find("compiler") == occupied_slots.cend()) throw std::runtime_error("No module occupies the \"compiler\" slot");
     if (occupied_slots.find("build") == occupied_slots.cend()) throw std::runtime_error("No module occupies the \"build\" slot");
 
-    for (auto module = _modules.cbegin(); module != _modules.cend(); module++) (*module)->check(_modules);
+    for (auto module = modules.cbegin(); module != modules.cend(); module++) (*module)->check(this);
 }
 
 void rm::RetroMake::_pre_work()
 {
-    for (auto module = _modules.cbegin(); module != _modules.cend(); module++) (*module)->pre_work(this);
+    for (auto module = modules.cbegin(); module != modules.cend(); module++) (*module)->pre_work(this);
 }
 
 int rm::RetroMake::_work()
@@ -368,7 +368,7 @@ int rm::RetroMake::_work()
 
 void rm::RetroMake::_post_work()
 {
-    for (auto module = _modules.cbegin(); module != _modules.cend(); module++) (*module)->post_work(this);
+    for (auto module = modules.cbegin(); module != modules.cend(); module++) (*module)->post_work(this);
 }
 
 int rm::RetroMake::run(int argc, char **argv)
@@ -405,7 +405,7 @@ int rm::RetroMake::run(int argc, char **argv)
 
 rm::RetroMake::~RetroMake()
 {
-    for (auto module = _modules.begin(); module != _modules.end(); module++) delete (*module);
+    for (auto module = modules.begin(); module != modules.end(); module++) delete (*module);
 }
 
 int _main(int argc, char **argv)

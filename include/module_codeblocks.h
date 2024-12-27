@@ -14,9 +14,10 @@ namespace rm
         {
             const CodeBlocksModule &owner;
             XMLDocument &document;
+            std::string compiler;
             bool change;
 
-            Checkout(const CodeBlocksModule &owner, XMLDocument &document);
+            Checkout(const CodeBlocksModule &owner, XMLDocument &document, const std::string &compiler);
             XMLNode *create_node(XMLNode *parent, const char *name);
             XMLNode *create_node(XMLNode *parent, const char *name, const char *attribute_name);
             XMLNode *create_node(XMLNode *parent, const char *name, const char *attribute_name, const char *attribute_value);
@@ -34,8 +35,8 @@ namespace rm
         std::string name() const override;
         std::string help() const override;
         std::vector<std::string> slots() const override;
-        void check(const std::vector<Module*> &modules) const override;
+        void check(const RetroMake *system) const override;
         void pre_work(RetroMake *system) override;
-        void post_work(RetroMake *system) override;
+        void post_work(const RetroMake *system) override;
     };
 }

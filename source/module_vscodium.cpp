@@ -6,7 +6,8 @@
 
 #include <cstring>
 
-rm::VSCodiumModule::Checkout::Checkout(const VSCodiumModule &owner, JSONAllocator &allocator) : owner(owner), allocator(allocator), change(false) {}
+rm::VSCodiumModule::Checkout::Checkout(const std::string &binary_directory, JSONAllocator &allocator)
+    : binary_directory(binary_directory), allocator(allocator), change(false) {}
 
 void rm::VSCodiumModule::Checkout::checkout_args(JSONValue &args)
 {
@@ -31,13 +32,13 @@ void rm::VSCodiumModule::Checkout::checkout_options(JSONValue &options)
     if (!options.IsObject() || options.MemberCount() != 1 || std::strcmp(options.MemberBegin()->name.GetString(), "cwd") != 0)
     {
         options.SetObject();
-        options.AddMember("cwd", JSONValue(owner._system->binary_directory.c_str(), allocator), allocator);
+        options.AddMember("cwd", JSONValue(binary_directory.c_str(), allocator), allocator);
         change = true;
     }
     else
     {
         auto option = options.MemberBegin();
-        change |= checkout_string(option->value, allocator, owner._system->binary_directory.c_str());
+        change |= checkout_string(option->value, allocator, binary_directory.c_str());
     }
 }
 
@@ -103,7 +104,7 @@ rm::Module *rm::VSCodiumModule::create_module(const std::string &requested_modul
     return nullptr;
 }
 
-rm::VSCodiumModule::VSCodiumModule() : _system(nullptr)
+rm::VSCodiumModule::VSCodiumModule()
 {}
 
 int rm::VSCodiumModule::order() const
@@ -131,7 +132,7 @@ std::vector<std::string> rm::VSCodiumModule::slots() const
     return { "editor" };
 }
 
-void rm::VSCodiumModule::check(const std::vector<Module*> &modules) const
+void rm::VSCodiumModule::check(const RetroMake *system) const
 {
     //No additional checks
 }
@@ -141,13 +142,12 @@ void rm::VSCodiumModule::pre_work(RetroMake *system)
     //Do nothing
 }
 
-void rm::VSCodiumModule::post_work(RetroMake *system)
+void rm::VSCodiumModule::post_work(const RetroMake *system)
 {
-    _system = system;
     const std::string tasks_file = system->source_directory + ".vscode/tasks.json";
     JSONDocument document;
     bool change = !document_read(document, tasks_file);
-    Checkout checkout(*this, document.GetAllocator());
+    Checkout checkout(system->binary_directory, document.GetAllocator());
     checkout.checkout_document(document);
     change |= checkout.change;
     if (change) document_write(document, tasks_file, 2);
