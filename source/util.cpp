@@ -1,11 +1,5 @@
 #include "../include/util.h"
 
-#include <rapidjson/allocators.h>
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/rapidjson.h>
-#include <rapidjson/stringbuffer.h>
-
 #include <rapidxml/rapidxml.hpp>
 namespace rapidxml { namespace internal {
 template <class OutIt, class Ch> inline OutIt print_children(OutIt, const xml_node<Ch>*, int, int);
@@ -312,76 +306,6 @@ void rm::path_ensure(const std::string &path, const bool is_directory, const siz
         const bool should_be_directory = is_directory || depth != depth2;
         if (should_be_directory && mkdir(path2c, 0700) != 0) throw std::runtime_error("Failed to create directory " + std::string(path2c));
     }
-}
-
-bool rm::document_read(JSONDocument &document, const std::string &path)
-{
-    //Read file
-    if (!path_exists(path, false, nullptr)) return false;
-    std::string content;
-    {
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open()) return false;
-        file.seekg(0, std::ios::end);
-        content.resize(file.tellg());
-        file.seekg(0, std::ios::beg);
-        if (!file.read(&content[0], content.size())) throw std::runtime_error("Failed to read file " + path);
-    }
-
-    //Parse file
-    try { document.Parse(content.c_str()); }
-    catch(...) { throw std::runtime_error("Failed to parse JSON file " + path); }
-    return true;
-}
-
-void rm::document_write(const JSONDocument &document, const std::string &path, size_t depth)
-{
-    rapidjson::StringBuffer buffer;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-    document.Accept(writer);
-
-    path_ensure(path, false, depth);
-    std::ofstream file(path, std::ios::binary);
-    if (!file.write(buffer.GetString(), buffer.GetSize())) throw std::runtime_error("Failed to write file " + path);
-}
-
-bool rm::document_read(XMLDocument &document, const std::string &path)
-{
-    //Read file
-    if (!path_exists(path, false, nullptr)) return false;
-    std::string content;
-    {
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open()) return false;
-        file.seekg(0, std::ios::end);
-        content.resize(file.tellg());
-        file.seekg(0, std::ios::beg);
-        if (!file.read(&content[0], content.size())) throw std::runtime_error("Failed to read file " + path);
-    }
-
-    //Parse file
-    try { document.parse<rapidxml::parse_full>(&content[0]); }
-    catch(...) { throw std::runtime_error("Failed to parse XML file " + path); }
-    return true;
-}
-
-void rm::document_write(const XMLDocument &document, const std::string &path, size_t depth)
-{
-    path_ensure(path, false, depth);
-    std::ofstream file(path, std::ios::binary);
-    std::basic_ostream<char> &basic_file = file;
-    rapidxml::print(basic_file, document); //Doesn't accept plain ofstream
-    if (!file.good()) throw std::runtime_error("Failed to write file " + path);
-}
-
-bool rm::checkout_string(JSONValue &string, JSONAllocator &allocator, const char *value)
-{
-    if (!string.IsString() || std::strcmp(string.GetString(), value) != 0)
-    {
-        string.SetString(value, allocator);
-        return true;
-    }
-    return false;
 }
 
 int rm::call_wait(std::vector<std::string> &arguments, std::map<std::string, std::string> *environment)

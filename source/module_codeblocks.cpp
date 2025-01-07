@@ -1,11 +1,6 @@
 #include "../include/module_codeblocks.h"
 #include "../include/retromake.h"
-
-#include <rapidjson/allocators.h>
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/rapidjson.h>
-#include <rapidjson/stringbuffer.h>
+#include "../include/xml.h"
 
 #include <rapidxml/rapidxml.hpp>
 namespace rapidxml { namespace internal {
@@ -24,79 +19,9 @@ template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_nod
 #include <cstring>
 #include <iostream>
 
-rm::CodeBlocksModule::Checkout::Checkout(const CodeBlocksModule &owner, XMLDocument &document, const std::string &compiler)
-    : owner(owner), document(document), compiler(compiler), change(false) {}
+rm::CodeBlocksModule::Checkout::Checkout(const CodeBlocksModule &owner, const std::string &compiler) : owner(owner), compiler(compiler) {}
 
-rm::XMLNode *rm::CodeBlocksModule::Checkout::create_node(XMLNode *parent, const char *name)
-{
-    auto child = parent->first_node(name);
-    if (child == nullptr || child->type() != rapidxml::node_element)
-    {
-        if (child != nullptr) parent->remove_node(child);
-        child = document.allocate_node(rapidxml::node_element, name);
-        parent->append_node(child);
-        change = true;
-    }
-    return child;
-}
-
-rm::XMLNode *rm::CodeBlocksModule::Checkout::create_node(XMLNode *parent, const char *name, const char *attribute_name)
-{
-    auto child = parent->first_node(name);
-    while (child != nullptr)
-    {
-        if (child->type() == rapidxml::node_element)
-        {
-            auto attribute = child->first_attribute(attribute_name);
-            if (attribute != nullptr) break;
-        }
-        child = child->next_sibling(name);
-    }
-    if (child == nullptr)
-    {
-        child = document.allocate_node(rapidxml::node_element, name);
-        parent->append_node(child);
-        change = true;
-    }
-    return child;
-}
-
-rm::XMLNode *rm::CodeBlocksModule::Checkout::create_node(XMLNode *parent, const char *name, const char *attribute_name, const char *attribute_value)
-{
-    auto child = parent->first_node(name);
-    while (child != nullptr)
-    {
-        if (child->type() == rapidxml::node_element)
-        {
-            auto attribute = child->first_attribute(attribute_name);
-            if (attribute != nullptr && std::strcmp(attribute->value(), attribute_value) == 0) break;
-        }
-        child = child->next_sibling(name);
-    }
-    if (child == nullptr)
-    {
-        child = document.allocate_node(rapidxml::node_element, name);
-        parent->append_node(child);
-        const char *attribute_value_copy = document.allocate_string(attribute_value);
-        auto attribute = document.allocate_attribute(attribute_name, attribute_value_copy);
-        child->append_attribute(attribute);
-        change = true;
-    }
-    return child;
-}
-
-void rm::CodeBlocksModule::Checkout::checkout_attribute(XMLNode *node, const char *attribute_name, const char *attribute_value)
-{
-    auto attribute = node->first_attribute(attribute_name);
-    if (attribute != nullptr && std::strcmp(attribute->value(), attribute_value) == 0) return;
-    if (attribute != nullptr) node->remove_attribute(attribute);
-    const char *attribute_value_copy = document.allocate_string(attribute_value);
-    attribute = document.allocate_attribute(attribute_name, attribute_value_copy);
-    node->append_attribute(attribute);
-    change = true;
-}
-
-void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const Target &target)
+void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode &target_node, const Target &target)
 {
     //Option output
     std::string directory = target.path; path_parent(&directory);
@@ -104,22 +29,22 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const
     if ((target.typ == "STATIC_LIBRARY" || target.typ == "SHARED_LIBRARY") && (std::strncmp(basename.c_str(), "lib", 3) == 0))
         basename.erase(0, 3);
     
-    auto option_output = create_node(target_node, "Option", "output");
-    std::string option_output_string = directory + basename;
-    checkout_attribute(option_output, "output", option_output_string.c_str());
+    XMLNode &option_output_node = create_node(target_node, "Option", "output");
+    const std::string option_output = directory + basename;
+    checkout_attribute(option_output_node, "output", option_output);
     if (target.typ == "SHARED_LIBRARY")
     {
-        checkout_attribute(option_output, "imp_lib", "$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a");
-        checkout_attribute(option_output, "def_file", "$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def");
+        checkout_attribute(option_output_node, "imp_lib", "$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).a");
+        checkout_attribute(option_output_node, "def_file", "$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).def");
     }
-    checkout_attribute(option_output, "prefix_auto", "1");
-    checkout_attribute(option_output, "extension_auto", "1");
+    checkout_attribute(option_output_node, "prefix_auto", "1");
+    checkout_attribute(option_output_node, "extension_auto", "1");
 
     //Option object_output
-    auto option_object_output = create_node(target_node, "Option", "object_output");
-    std::string option_object_output_string = directory;
-    auto bin = option_object_output_string.rfind("bin/"); if (bin != std::string::npos) option_object_output_string.replace(bin, 4, "obj/"); //TODO: INCORRECT!
-    checkout_attribute(option_object_output, "object_output", option_object_output_string.c_str());
+    XMLNode &option_object_output_node = create_node(target_node, "Option", "object_output");
+    std::string option_object_output = directory;
+    size_t bin = option_object_output.rfind("bin/"); if (bin != std::string::npos) option_object_output.replace(bin, 4, "obj/"); //TODO: INCORRECT!
+    checkout_attribute(option_object_output_node, "object_output", option_object_output);
 
     //Option type
     if (target.typ == "EXECUTABLE") checkout_attribute(create_node(target_node, "Option", "type"), "type", "1");
@@ -137,7 +62,7 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const
     }
 
     //Compiler
-    auto compiler_node = create_node(target_node, "Compiler");
+    XMLNode &compiler_node = create_node(target_node, "Compiler");
     for (auto option = target.options.cbegin(); option != target.options.cend(); option++)
     {
         create_node(compiler_node, "Add", "option", option->c_str());
@@ -146,32 +71,32 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode *target_node, const
     {
         std::string define_string = "-D" + define->first;
         if (!define->second.empty()) define_string += "=" + define->second;
-        create_node(compiler_node, "Add", "option", define_string.c_str());
+        create_node(compiler_node, "Add", "option", define_string);
     }
     for (auto directory = target.directories.cbegin(); directory != target.directories.cend(); directory++)
     {
-        create_node(compiler_node, "Add", "directory", directory->c_str());
+        create_node(compiler_node, "Add", "directory", *directory);
     }
 
     //Linker
-    auto linker_node = create_node(target_node, "Linker");
+    XMLNode &linker_node = create_node(target_node, "Linker");
     for (auto option = target.linker_options.cbegin(); option != target.linker_options.cend(); option++)
     {
-        create_node(linker_node, "Add", "option", option->c_str());
+        create_node(linker_node, "Add", "option", *option);
     }
     for (auto library = target.linker_sources.cbegin(); library != target.linker_sources.cend(); library++)
     {
-        create_node(linker_node, "Add", "library", library->c_str());
+        create_node(linker_node, "Add", "library", *library);
     }
 }
 
-void rm::CodeBlocksModule::Checkout::checkout_build(XMLNode *build_node, const std::vector<Target> &targets)
+void rm::CodeBlocksModule::Checkout::checkout_build(XMLNode &build_node, const std::vector<Target> &targets)
 {
     for (auto target = targets.cbegin(); target != targets.cend(); target++)
     {
-        std::string target_title_string = target->name.c_str();
-        if (!target->configuration_name.empty()) target_title_string += '_' + target->configuration_name;
-        auto target_node = create_node(build_node, "Target", "title", target_title_string.c_str());
+        std::string target_title = target->name;
+        if (!target->configuration_name.empty()) target_title += '_' + target->configuration_name;
+        XMLNode &target_node = create_node(build_node, "Target", "title", target_title);
         checkout_target(target_node, *target);
     }
 }
@@ -179,45 +104,38 @@ void rm::CodeBlocksModule::Checkout::checkout_build(XMLNode *build_node, const s
 void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target> &targets, const Project &project)
 {
     //Declaration
-    auto declaration = document.first_node();
-    if (declaration == nullptr || declaration->type() != rapidxml::node_declaration)
-    {
-        document.remove_all_nodes();
-        declaration = document.allocate_node(rapidxml::node_declaration);
-        document.append_node(declaration);
-        change = true;
-    }
+    XMLNode &declaration = create_declaration();
     checkout_attribute(declaration, "version", "1.0");
     checkout_attribute(declaration, "encoding", "UTF-8");
     checkout_attribute(declaration, "standalone", "yes");
 
     //CodeBlocks_project_file
-    auto root = create_node(&document, "CodeBlocks_project_file");
+    XMLNode &root = create_node(*document, "CodeBlocks_project_file");
 
     //FileVersion
-    auto file_version = create_node(root, "FileVersion");
+    XMLNode &file_version = create_node(root, "FileVersion");
     checkout_attribute(file_version, "major", "1");
     checkout_attribute(file_version, "minor", "6");
 
     //Project
-    auto project_node = create_node(root, "Project");
+    XMLNode &project_node = create_node(root, "Project");
     checkout_attribute(create_node(project_node, "Option", "title"), "title", project.name.c_str());
     checkout_attribute(create_node(project_node, "Option", "pch_mode"), "pch_mode", "2");
     checkout_attribute(create_node(project_node, "Option", "compiler"), "compiler", compiler.c_str());
     
     //Build
-    auto build_node = create_node(project_node, "Build");
+    XMLNode &build_node = create_node(project_node, "Build");
     checkout_build(build_node, targets);
 
     //VirtualTargets
-    auto virtual_targets = create_node(project_node, "VirtualTargets");
+    XMLNode &virtual_targets = create_node(project_node, "VirtualTargets");
     std::set<std::string> configuration_names;
     for (auto target = targets.cbegin(); target != targets.cend(); target++) configuration_names.insert(target->configuration_name);
     for (auto configuration_name = configuration_names.cbegin(); configuration_name != configuration_names.cend(); configuration_name++)
     {
         std::string add_alias_string = "all";
         if (!configuration_name->empty()) add_alias_string += '_' + *configuration_name;
-        auto add_alias = create_node(virtual_targets, "Add", "alias", add_alias_string.c_str());
+        XMLNode &add_alias = create_node(virtual_targets, "Add", "alias", add_alias_string.c_str());
 
         std::string add_targets_string = "";
         for (auto target = targets.cbegin(); target != targets.cend(); target++)
@@ -249,7 +167,7 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
     }
     for (auto source = map.cbegin(); source != map.cend(); source++)
     {
-        auto unit_filename = create_node(project_node, "Unit", "filename", source->first.c_str());
+        XMLNode &unit_filename = create_node(project_node, "Unit", "filename", source->first.c_str());
         for (auto target = source->second.cbegin(); target != source->second.cend(); target++)
         {
             std::string option_target_string = (*target)->name;
@@ -390,10 +308,8 @@ void rm::CodeBlocksModule::post_work(const RetroMake *system)
 
     //Create project
     const std::string project_file = system->binary_directory + project.name + ".cbp";
-    XMLDocument document;
-    bool change = !document_read(document, project_file);
-    Checkout checkout(*this, document, compiler);
+    Checkout checkout(*this, compiler);
+    checkout.document_read(project_file);
     checkout.checkout_document(sorted_targets, project);
-    change |= checkout.change;
-    if (change) document_write(document, project_file, 1);
+    if (checkout.change) checkout.document_write(project_file, 2);
 }

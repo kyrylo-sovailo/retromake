@@ -1,6 +1,7 @@
 #pragma once
 #include "module.h"
 #include "codemodel.h"
+#include "json.h"
 #include "util.h"
 
 namespace rm
@@ -8,17 +9,15 @@ namespace rm
     class NativeDebugModule : public Module
     {
     private:
-        struct Checkout
+        struct Checkout : JSONEditor
         {
-            bool lldb;
-            JSONAllocator &allocator;
-            bool change;
+            const NativeDebugModule &owner;
+            Checkout(const NativeDebugModule &owner);
             
-            Checkout(bool lldb, JSONAllocator &allocator);
-            void checkout_debugger_args(JSONValue &debugger_args, const Target &target, bool creation);
-            void checkout_configuration(JSONValue &configuration, const Target &target, bool creation);
-            void checkout_configurations(JSONValue &configurations, const std::vector<Target> &targets);
-            void checkout_document(JSONValue &document, const std::vector<Target> &targets);
+            void checkout_debugger_args(JSONValue &debugger_args_node, const Target &target);
+            void checkout_configuration(JSONValue &configuration_node, const Target &target, bool creation);
+            void checkout_configurations(JSONValue &configurations_node, const std::vector<Target> &targets);
+            void checkout_document(const std::vector<Target> &targets);
         };
 
         bool _lldb;

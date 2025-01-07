@@ -6,88 +6,73 @@
 
 #include <cstring>
 
-rm::VSCodiumModule::Checkout::Checkout(const std::string &binary_directory, JSONAllocator &allocator)
-    : binary_directory(binary_directory), allocator(allocator), change(false) {}
+rm::VSCodiumModule::Checkout::Checkout(const RetroMake &owner) : owner(owner) {}
 
-void rm::VSCodiumModule::Checkout::checkout_args(JSONValue &args)
+void rm::VSCodiumModule::Checkout::checkout_args(JSONValue &args_node)
 {
-    if (!args.IsArray() || args.GetArray().Size() != 2)
+    if (args_node.GetArray().Size() != 2)
     {
-        args.SetArray();
-        args.PushBack(JSONValue("-c", allocator), allocator);
-        args.PushBack(JSONValue("cmake --build .", allocator), allocator);
+        args_node.SetArray();
+        args_node.PushBack(JSONValue("-c", *allocator), *allocator);
+        args_node.PushBack(JSONValue("cmake --build .", *allocator), *allocator);
         change = true;
     }
     else
     {
-        auto arg = args.Begin();
-        change |= checkout_string(*arg, allocator, "-c");
-        arg++;
-        change |= checkout_string(*arg, allocator, "cmake --build .");
+        auto arg_node = args_node.Begin();
+        checkout_string(*arg_node, "-c");
+        arg_node++;
+        checkout_string(*arg_node, "cmake --build .");
     }
 }
 
-void rm::VSCodiumModule::Checkout::checkout_options(JSONValue &options)
+void rm::VSCodiumModule::Checkout::checkout_options(JSONValue &options_node)
 {
-    if (!options.IsObject() || options.MemberCount() != 1 || std::strcmp(options.MemberBegin()->name.GetString(), "cwd") != 0)
-    {
-        options.SetObject();
-        options.AddMember("cwd", JSONValue(binary_directory.c_str(), allocator), allocator);
-        change = true;
-    }
-    else
-    {
-        auto option = options.MemberBegin();
-        change |= checkout_string(option->value, allocator, binary_directory.c_str());
-    }
+    const std::string binary_directory = "${workspaceFolder}/" + path_relative(owner.binary_directory, owner.source_directory, nullptr);
+    checkout_string(create_string(options_node, "cwd"), binary_directory);
 }
 
-void rm::VSCodiumModule::Checkout::checkout_task(JSONValue &task)
+void rm::VSCodiumModule::Checkout::checkout_task(JSONValue &task_node)
 {
     //label
-    if (!task.HasMember("label")) { task.AddMember("label", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(task["label"], allocator, "retromake-build-task");
+    checkout_string(create_string(task_node, "label"), "retromake-build-task");
     //type
-    if (!task.HasMember("type")) { task.AddMember("type", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(task["type"], allocator, "shell");
+    checkout_string(create_string(task_node, "type"), "shell");
     //command
-    if (!task.HasMember("command")) { task.AddMember("command", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(task["command"], allocator, "/bin/sh");
+    checkout_string(create_string(task_node, "command"), "/bin/sh");
     //args
-    if (!task.HasMember("args")) { task.AddMember("args", JSONValue(rapidjson::kArrayType), allocator); change = true; }
-    checkout_args(task["args"]);
+    checkout_args(create_array(task_node, "args"));
     //options
-    if (!task.HasMember("options")) { task.AddMember("options", JSONValue(rapidjson::kObjectType), allocator); change = true; }
-    checkout_options(task["options"]);
+    checkout_options(create_object(task_node, "options"));
 }
 
-void rm::VSCodiumModule::Checkout::checkout_tasks(JSONValue &tasks)
+void rm::VSCodiumModule::Checkout::checkout_tasks(JSONValue &tasks_node)
 {
-    if (!tasks.IsArray()) { tasks.SetArray(); change = true; }
     bool task_exists = false;
-    for (auto task = tasks.Begin(); task != tasks.End() && !task_exists; task++)
+    for (auto task_node = tasks_node.Begin(); task_node != tasks_node.End(); task_node++)
     {
-        if (!task->IsObject()) continue;
-        if (!task->HasMember("label")) continue;
-        JSONValue &label = (*task)["label"];
-        if (!label.IsString() || std::strcmp(label.GetString(), "retromake-build-task") != 0) continue;
+        if (!task_node->IsObject()) continue;
+        const JSONValue *label_node = find_string(*task_node, "label");
+        if (label_node == nullptr || std::strcmp(label_node->GetString(), "retromake-build-task") != 0) continue;
+        
+        checkout_task(*task_node);
         task_exists = true;
-        checkout_task((*task));
+        break;
     }
     if (!task_exists)
     {
-        JSONValue task = JSONValue(rapidjson::kObjectType);
-        checkout_task(task);
-        tasks.PushBack(std::move(task), allocator);
+        JSONValue task_node = JSONValue(rapidjson::kObjectType);
+        checkout_task(task_node);
+        tasks_node.PushBack(std::move(task_node), *allocator);
         change = true;
     }
 }
 
-void rm::VSCodiumModule::Checkout::checkout_document(JSONValue &document)
+void rm::VSCodiumModule::Checkout::checkout_document()
 {
-    if (!document.IsObject()) { document.SetObject(); change = true; }
-    if (!document.HasMember("tasks")) { document.AddMember("tasks", JSONValue(rapidjson::kArrayType), allocator); change = true; }
-    checkout_tasks(document["tasks"]);
+    if (document->IsObject()) { document->SetObject(); change = true; }
+    JSONValue &tasks_node = create_array(*document, "tasks");
+    checkout_tasks(tasks_node);
 }
 
 rm::Module *rm::VSCodiumModule::create_module(const std::string &requested_module)
@@ -145,11 +130,8 @@ void rm::VSCodiumModule::pre_work(RetroMake *system)
 void rm::VSCodiumModule::post_work(const RetroMake *system)
 {
     const std::string tasks_file = system->source_directory + ".vscode/tasks.json";
-    JSONDocument document;
-    bool change = !document_read(document, tasks_file);
-    const std::string binary_directory = "${workspaceFolder}/" + path_relative(system->binary_directory, system->source_directory, nullptr);
-    Checkout checkout(binary_directory, document.GetAllocator());
-    checkout.checkout_document(document);
-    change |= checkout.change;
-    if (change) document_write(document, tasks_file, 2);
+    Checkout checkout(*system);
+    checkout.document_read(tasks_file);
+    checkout.checkout_document();
+    if (checkout.change) checkout.document_write(tasks_file, 2);
 }

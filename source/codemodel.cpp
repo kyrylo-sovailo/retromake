@@ -1,4 +1,5 @@
 #include "../include/codemodel.h"
+#include "../include/json.h"
 #include "../include/util.h"
 
 #include <rapidjson/document.h>
@@ -40,191 +41,173 @@ std::vector<rm::Target> rm::codemodel_parse(const std::string &binary_directory,
     if (codemodel_file.empty()) throw std::runtime_error("CMake file API did not return a codemodel");
 
     //Read codemodel file
-    JSONDocument document;
-    if (!document_read(document, codemodel_file)) throw std::runtime_error("Failed to read file " + codemodel_file);
+    JSONEditor editor;
+    editor.document_read(codemodel_file);
+    if (editor.change) throw std::runtime_error("Failed to read file " + codemodel_file);
+    std::vector<Target> result;
 
     //Find name
-    std::vector<Target> result;
-    if (!document.IsObject() || !document.HasMember("configurations")) return result;
-    const JSONValue &configurations = document["configurations"];
-    if (!configurations.IsArray() || document["configurations"].Size() == 0) return result;
-    for (auto configuration = configurations.Begin(); configuration != configurations.End(); configuration++)
+    if (!editor.document->IsObject()) return result;
+    const JSONValue *configurations_node = find_array(*editor.document, "configurations");
+    if (configurations_node == nullptr) return result;
+    for (auto configuration_node = configurations_node->Begin(); configuration_node != configurations_node->End(); configuration_node++)
     {
-        if (!configuration->IsObject() || !configuration->HasMember("targets")) return result;
-        std::string configuration_name;
-        if (configuration->HasMember("name"))
-        {
-            const JSONValue &configuration_name_string = (*configuration)["name"];
-            if (configuration_name_string.IsString()) configuration_name = configuration_name_string.GetString();
-        }
+        if (!configuration_node->IsObject()) continue;
+        const JSONValue *name_node = find_string(*configuration_node, "name");
+        const JSONValue *targets_node = find_array(*configuration_node, "targets");
+        const JSONValue *projects_node = find_array(*configuration_node, "projects");
+        if (targets_node == nullptr || projects_node == nullptr) continue;
+
+        //Name
+        const std::string name = (name_node != nullptr) ? name_node->GetString() : "";
 
         //Project
         if (project != nullptr)
         {
-            const JSONValue &projects = (*configuration)["projects"];
-            for (auto _project = projects.Begin(); _project != projects.End(); _project++)
+            for (auto project_node = projects_node->Begin(); project_node != projects_node->End(); project_node++)
             {
-                if (!_project->IsObject() || !_project->HasMember("name")) continue;
-                const JSONValue &name = (*_project)["name"];
-                if (!name.IsString()) continue;
-                project->name = name.GetString();
+                if (!project_node->IsObject()) continue;
+                const JSONValue *name_node = find_string(*project_node, "name");
+                if (name_node != nullptr && name_node->GetStringLength() > 0) project->name = name_node->GetString();
             }
         }
 
-        //Find targets
-        const JSONValue &targets = (*configuration)["targets"];
-        for (auto target = targets.Begin(); target != targets.End(); target++)
+        //Targets
+        for (auto target_node = targets_node->Begin(); target_node != targets_node->End(); target_node++)
         {
-            if (!target->IsObject() || !target->HasMember("jsonFile")) continue;
-            const JSONValue &json_file = (*target)["jsonFile"];
-            if (!json_file.IsString()) continue;
+            if (!target_node->IsObject()) continue;
+            const JSONValue *json_file_node = find_string(*target_node, "jsonFile");
+            if (json_file_node == nullptr) continue;
+            const std::string target_file = reply_directory + json_file_node->GetString();
+            JSONEditor target_editor;
+            target_editor.document_read(target_file);
+            if (target_editor.change || !target_editor.document->IsObject())
+                throw std::runtime_error("Failed to read file " + target_file);
 
-            const std::string target_file = reply_directory + json_file.GetString();
-            JSONDocument target_document;
-            if (!document_read(target_document, target_file)) throw std::runtime_error("Failed to read file " + target_file);
-
-            if (!target_document.IsObject() || !target_document.HasMember("type")) continue;
-            const JSONValue &typ = target_document["type"];
-            if (!typ.IsString() || (
-            std::strcmp(typ.GetString(), "EXECUTABLE") != 0
-            && std::strcmp(typ.GetString(), "SHARED_LIBRARY") != 0
-            && std::strcmp(typ.GetString(), "STATIC_LIBRARY") != 0)) continue;
-            if (!target_document.HasMember("name")) continue;
-            const JSONValue &name = target_document["name"];
-            if (!name.IsString()) continue;
-            if (!target_document.HasMember("paths")) continue;
-            const JSONValue &paths = target_document["paths"];
-            if (!paths.IsObject() || !paths.HasMember("build")) continue;
-            const JSONValue &build = paths["build"];
-            if (!build.IsString()) continue;
-            if (!target_document.HasMember("artifacts")) continue;
-            const JSONValue &artifacts = target_document["artifacts"];
-            if (!artifacts.IsArray()) continue;
+            const JSONValue *type_node = find_string(*target_editor.document, "type");
+            if (type_node == nullptr) continue;
+            if (std::strcmp(type_node->GetString(), "EXECUTABLE") != 0
+            && std::strcmp(type_node->GetString(), "SHARED_LIBRARY") != 0
+            && std::strcmp(type_node->GetString(), "STATIC_LIBRARY") != 0) continue;
+            const JSONValue *name_node = find_string(*target_editor.document, "name");
+            if (name_node == nullptr) continue;
+            const JSONValue *paths_node = find_object(*target_editor.document, "paths");
+            if (paths_node == nullptr) continue;
+            const JSONValue *paths_build_node = find_string(*paths_node, "build");
+            if (paths_build_node == nullptr) continue;
+            const JSONValue *artifacts_node = find_array(*target_editor.document, "artifacts");
+            if (artifacts_node == nullptr) continue;
             const char *artifact_path = nullptr;
-            for (auto artifact = artifacts.Begin(); artifact != artifacts.End() && artifact_path == nullptr; artifact++)
+            for (auto artifact_node = artifacts_node->Begin(); artifact_node != artifacts_node->End(); artifact_node++)
             {
-                if (!artifact->IsObject() || !artifact->HasMember("path")) continue;
-                const JSONValue &path = (*artifact)["path"];
-                if (path.IsString()) artifact_path = path.GetString();
+                if (!artifact_node->IsObject()) continue;
+                const JSONValue *path_node = find_string(*artifact_node, "path");
+                if (path_node == nullptr) continue;
+                artifact_path = path_node->GetString();
+                break;
             }
             if (artifact_path == nullptr) continue;
 
             result.push_back(Target());
             Target &result_target = result.back();
-            result_target.typ = typ.GetString();
-            result_target.name = name.GetString();
-            result_target.configuration_name = configuration_name;
+            result_target.typ = type_node->GetString();
+            result_target.name = name_node->GetString();
+            result_target.configuration_name = name;
             result_target.path = binary_directory;
-            path_append(&result_target.path, build.GetString(), true);
+            path_append(&result_target.path, paths_build_node->GetString(), true);
             path_append(&result_target.path, artifact_path, false);
             if (!full) continue;
 
-            if (target_document.HasMember("dependencies"))
+            const JSONValue *dependencies_node = find_array(*target_editor.document, "dependencies");
+            if (dependencies_node != nullptr)
+            for (auto dependency_node = dependencies_node->Begin(); dependency_node != dependencies_node->End(); dependency_node++)    
             {
-                const JSONValue &dependencies = target_document["dependencies"];
-                if (dependencies.IsArray()) for (auto dependency = dependencies.Begin(); dependency != dependencies.End(); dependency++)
-                {
-                    if (!dependency->IsObject() || !dependency->HasMember("id")) continue;
-                    const JSONValue &id = (*dependency)["id"];
-                    if (!id.IsString()) continue;
-                    const char *id_c = id.GetString();
-                    const char *separator = std::strstr(id_c, "::@");
-                    if (separator == nullptr) continue;
-                    result_target.dependencies.insert(std::string(id_c, (separator - id_c)));
-                }
-            }
+                if (!dependency_node->IsObject()) continue;
+                const JSONValue *id_node = find_string(*dependency_node, "id");
+                if (id_node == nullptr) continue;
+                const char *id = id_node->GetString();
+                const char *separator = std::strstr(id, "::@");
+                if (separator == nullptr) continue;
+                result_target.dependencies.insert(std::string(id, (separator - id)));
+            };
 
-            if (target_document.HasMember("compileGroups"))
+            const JSONValue *compile_groups_node = find_array(*target_editor.document, "compileGroups");
+            if (compile_groups_node != nullptr)
+            for (auto group_node = compile_groups_node->Begin(); group_node != compile_groups_node->End(); group_node++)
             {
-                const JSONValue &compile_groups = target_document["compileGroups"];
-                if (compile_groups.IsArray()) for (auto group = compile_groups.Begin(); group != compile_groups.End(); group++)
+                if (!group_node->IsObject()) continue;
+                const JSONValue *language_node = find_string(*group_node, "language");
+                if (language_node != nullptr) result_target.language = language_node->GetString();
+                
+                const JSONValue *fragments_node = find_array(*group_node, "compileCommandFragments");
+                if (fragments_node != nullptr)
+                for (auto fragment_node = fragments_node->Begin(); fragment_node != fragments_node->End(); fragment_node++)
                 {
-                    if (!group->IsObject()) continue;
-                    if (group->HasMember("language"))
-                    {
-                        const JSONValue &language = (*group)["language"];
-                        if (language.IsString()) result_target.language = language.GetString();
-                    }
-                    if (group->HasMember("compileCommandFragments"))
-                    {
-                        const JSONValue &compile_fragments = (*group)["compileCommandFragments"];
-                        if (compile_fragments.IsArray()) for (auto fragment = compile_fragments.Begin(); fragment != compile_fragments.End(); fragment++)
-                        {
-                            if (!fragment->IsObject() || !fragment->HasMember("fragment")) continue;
-                            const JSONValue &fragment_string = (*fragment)["fragment"];
-                            if (!fragment_string.IsString()) continue;
-                            const auto fragment_strings = parse(fragment_string.GetString(), ' ');
-                            result_target.options.insert(fragment_strings.cbegin(), fragment_strings.cend());
-                        }
-                    }
-                    if (group->HasMember("defines"))
-                    {
-                        const JSONValue &defines = (*group)["defines"];
-                        if (defines.IsArray()) for (auto define = defines.Begin(); define != defines.End(); define++)
-                        {
-                            if (!define->IsObject() || !define->HasMember("define")) continue;
-                            const JSONValue &define_string = (*define)["define"];
-                            if (!define_string.IsString()) continue;
-                            const char *define_c = define_string.GetString();
-                            const char *equal = std::strchr(define_c, '=');
-                            if (equal == nullptr) result_target.defines.insert({define_c, ""});
-                            else result_target.defines.insert({std::string(define_c, (equal - define_c)), equal + 1});
-                        }
-                    }
-                    if (group->HasMember("includes"))
-                    {
-                        const JSONValue &includes = (*group)["includes"];
-                        if (includes.IsArray()) for (auto include = includes.Begin(); include != includes.End(); include++)
-                        {
-                            if (!include->IsObject() || !include->HasMember("path")) continue;
-                            const JSONValue &path_string = (*include)["path"];
-                            if (!path_string.IsString()) continue;
-                            std::string path = source_directory;
-                            path_append(&path, path_string.GetString(), false);
-                            result_target.directories.insert(path);
-                        }
-                    }
-                }
-            }
-
-            if (target_document.HasMember("link"))
-            {
-                const JSONValue &link = target_document["link"];
-                if (link.IsObject() && link.HasMember("commandFragments"))
+                    if (!fragment_node->IsObject()) continue;
+                    const JSONValue *frag_node = find_string(*fragment_node, "fragment");
+                    if (frag_node == nullptr) continue;
+                    const auto frag = parse(frag_node->GetString(), ' ');
+                    result_target.options.insert(frag.cbegin(), frag.cend());
+                };
+                const JSONValue *defines_node = find_array(*group_node, "defines");
+                if (defines_node != nullptr)
+                for (auto define_node = defines_node->Begin(); define_node != defines_node->End(); define_node++)
                 {
-                    const JSONValue &fragments = link["commandFragments"];
-                    if (fragments.IsArray()) for (auto fragment = fragments.Begin(); fragment != fragments.End(); fragment++)
-                    {
-                        if (!fragment->IsObject() || !fragment->HasMember("role") || !fragment->HasMember("fragment")) continue;
-                        const JSONValue &role_string = (*fragment)["role"];
-                        const JSONValue &fragment_string = (*fragment)["fragment"];
-                        if (!role_string.IsString() || !fragment_string.IsString()) continue;
-                        if (std::strcmp(role_string.GetString(), "flags") == 0)
-                        {
-                            const auto fragment_strings = parse(fragment_string.GetString(), ' ');
-                            result_target.linker_options.insert(fragment_strings.cbegin(), fragment_strings.cend());
-                        }
-                        else if (std::strcmp(role_string.GetString(), "libraries") == 0 && std::strncmp(fragment_string.GetString(), "-W", 2) != 0) //TODO: GCC specific
-                        {
-                            const auto fragment_strings = parse(fragment_string.GetString(), ' ');
-                            result_target.linker_sources.insert(fragment_strings.cbegin(), fragment_strings.cend());
-                        }
-                    }
-                }
-            }
-
-            if (target_document.HasMember("sources"))
-            {
-                const JSONValue &sources = target_document["sources"];
-                if (sources.IsArray()) for (auto source = sources.Begin(); source != sources.End(); source++)
+                    if (!define_node->IsObject()) continue;
+                    const JSONValue *def_node = find_string(*define_node, "define");
+                    if (def_node == nullptr) continue;
+                    const char *def = def_node->GetString();
+                    const char *equal = std::strchr(def, '=');
+                    if (equal == nullptr) result_target.defines.insert({def, ""});
+                    else result_target.defines.insert({std::string(def, (equal - def)), equal + 1});
+                };
+                const JSONValue *includes_node = find_array(*group_node, "includes");
+                if (includes_node != nullptr)
+                for (auto include_node = includes_node->Begin(); include_node != includes_node->End(); include_node++)
                 {
-                    if (!source->IsObject() || !source->HasMember("compileGroupIndex") || !source->HasMember("path")) continue;
-                    const JSONValue &path_string = (*source)["path"];
-                    if (!path_string.IsString()) continue;
+                    if (!include_node->IsObject()) continue;
+                    const JSONValue *path_node = find_string(*include_node, "path");
+                    if (path_node == nullptr) continue;
                     std::string path = source_directory;
-                    path_append(&path, path_string.GetString(), false);
-                    result_target.sources.insert(path);
+                    path_append(&path, path_node->GetString(), false);
+                    result_target.directories.insert(path);
                 }
+            };
+
+            const JSONValue *link_node = find_object(*target_editor.document, "link");
+            if (link_node != nullptr)
+            {
+                const JSONValue *fragments_node = find_array(*link_node, "commandFragments");
+                if (fragments_node != nullptr)
+                for (auto fragment_node = fragments_node->Begin(); fragment_node != fragments_node->End(); fragment_node++)
+                {
+                    if (!fragment_node->IsObject()) continue;
+                    const JSONValue *role_node = find_string(*fragment_node, "role");
+                    const JSONValue *frag_node = find_string(*fragment_node, "fragment");
+                    if (role_node == nullptr || frag_node == nullptr) continue;
+                    if (std::strcmp(role_node->GetString(), "flags") == 0)
+                    {
+                        const auto frag = parse(frag_node->GetString(), ' ');
+                        result_target.linker_options.insert(frag.cbegin(), frag.cend());
+                    }
+                    else if (std::strcmp(role_node->GetString(), "libraries") == 0 && std::strncmp(fragment_node->GetString(), "-W", 2) != 0) //TODO: GCC specific
+                    {
+                        const auto frag = parse(frag_node->GetString(), ' ');
+                        result_target.linker_sources.insert(frag.cbegin(), frag.cend());
+                    }
+                }
+            }
+
+            const JSONValue *sources_node = find_array(*target_editor.document, "sources");
+            if (sources_node != nullptr)
+            for (auto source_node = sources_node->Begin(); source_node != sources_node->End(); source_node++)
+            {
+                if (!source_node->IsObject() || !source_node->HasMember("compileGroupIndex")) continue;
+                const JSONValue *path_node = find_string(*source_node, "path");
+                if (path_node == nullptr) continue;
+                std::string path = source_directory;
+                path_append(&path, path_node->GetString(), false);
+                result_target.sources.insert(path);
             }
         }
     }

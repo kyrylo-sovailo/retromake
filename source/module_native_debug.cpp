@@ -7,86 +7,84 @@
 #include <cstring>
 #include <stdexcept>
 
-rm::NativeDebugModule::Checkout::Checkout(bool lldb, JSONAllocator &allocator) : lldb(lldb), allocator(allocator), change(false) {}
+rm::NativeDebugModule::Checkout::Checkout(const NativeDebugModule &owner) : owner(owner) {}
 
-void rm::NativeDebugModule::Checkout::checkout_debugger_args(JSONValue &debugger_args, const Target &target, bool creation)
+void rm::NativeDebugModule::Checkout::checkout_debugger_args(JSONValue &debugger_args_node, const Target &target)
 {
-    if (creation || !debugger_args.IsArray())
-    {
-        debugger_args.SetArray();
-        debugger_args.PushBack(JSONValue("-iex"), allocator);
-        debugger_args.PushBack(JSONValue("set env RETROMAKE_ENV=RETROMAKE_ENV"), allocator);
-        debugger_args.PushBack(JSONValue("--args"), allocator);
-        debugger_args.PushBack(JSONValue(target.path.c_str(), allocator), allocator);
-        debugger_args.PushBack(JSONValue("RETROMAKE_ARG"), allocator);
-        change = true;
-    }
+    debugger_args_node.SetArray();
+    debugger_args_node.PushBack(JSONValue("-iex"), *allocator);
+    debugger_args_node.PushBack(JSONValue("set env RETROMAKE_ENV=RETROMAKE_ENV"), *allocator);
+    debugger_args_node.PushBack(JSONValue("--args"), *allocator);
+    debugger_args_node.PushBack(JSONValue(target.path.c_str(), *allocator), *allocator);
+    debugger_args_node.PushBack(JSONValue("RETROMAKE_ARG"), *allocator);
+    change = true;
 }
 
-void rm::NativeDebugModule::Checkout::checkout_configuration(JSONValue &configuration, const Target &target, bool creation)
+void rm::NativeDebugModule::Checkout::checkout_configuration(JSONValue &configuration_node, const Target &target, bool creation)
 {
     //retromake_module
-    if (!configuration.HasMember("retromake_module")) { configuration.AddMember("retromake_module", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(configuration["retromake_module"], allocator, "Native Debug");
+    checkout_string(create_string(configuration_node, "retromake_module"), "Native Debug");
     //name
-    const std::string configuration_name = target.name + " (Native Debug, " + (lldb ? "LLDB-MI" : "GDB") + ")";
-    if (!configuration.HasMember("name")) { configuration.AddMember("name", JSONValue(configuration_name.c_str(), allocator), allocator); change = true; }
+    const std::string configuration_name = target.name + " (Native Debug, " + (owner._lldb ? "LLDB-MI" : "GDB") + ")";
+    checkout_string(create_string(configuration_node, "name"), configuration_name);
     //type
-    if (!configuration.HasMember("type")) { configuration.AddMember("type", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(configuration["type"], allocator, lldb ? "lldb-mi" : "gdb");
+    const std::string configuration_type = owner._lldb ? "lldb-mi" : "gdb";
+    checkout_string(create_string(configuration_node, "type"), configuration_type);
     //request
-    if (!configuration.HasMember("request")) { configuration.AddMember("request", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(configuration["request"], allocator, "launch");
-    //preLaunchTask
-    if (creation) { configuration.AddMember("preLaunchTask", JSONValue("retromake-build-task"), allocator); change = true; }
-    //target
-    if (!configuration.HasMember("target")) { configuration.AddMember("target", JSONValue(rapidjson::kStringType), allocator); change = true; }
-    change |= checkout_string(configuration["target"], allocator, target.path.c_str());
-    //cwd
-    std::string path_directory = target.path;
-    path_parent(&path_directory);
-    if (!configuration.HasMember("cwd")) { configuration.AddMember("cwd", JSONValue(path_directory.c_str(), allocator), allocator); change = true; } //TODO: cwd
+    checkout_string(create_string(configuration_node, "request"), "launch");
+    //preLaunchTask (can be absent)
+    if (creation) checkout_string(create_string(configuration_node, "preLaunchTask"), "retromake-build-task");
+    else if (configuration_node.HasMember("preLaunchTask")) create_string(configuration_node, "preLaunchTask");
+    //target (can differ)
+    bool wrong_format = configuration_node.HasMember("target") && !configuration_node["target"].IsString();
+    if (creation || wrong_format) checkout_string(create_string(configuration_node, "target"), target.path);
+    //cwd (can differ)
+    wrong_format = !configuration_node.HasMember("cwd") || !configuration_node["cwd"].IsString();
+    if (creation || wrong_format)
+    {
+        std::string directory = target.path;
+        path_parent(&directory);
+        checkout_string(create_string(configuration_node, "cwd"), directory);
+    }
     //debugger_args
-    if (!configuration.HasMember("debugger_args")) { configuration.AddMember("debugger_args", JSONValue(rapidjson::kArrayType), allocator); change = true; }
-    checkout_debugger_args(configuration["debugger_args"], target, creation);
+    wrong_format = !configuration_node.HasMember("debugger_args") || !configuration_node["debugger_args"].IsArray();
+    if (creation || wrong_format) checkout_debugger_args(create_array(configuration_node, "debugger_args"), target);
 }
 
-void rm::NativeDebugModule::Checkout::checkout_configurations(JSONValue &configurations, const std::vector<Target> &targets)
+void rm::NativeDebugModule::Checkout::checkout_configurations(JSONValue &configurations_node, const std::vector<Target> &targets)
 {
-    if (!configurations.IsArray()) { configurations.SetArray(); change = true; }
     for (auto target = targets.cbegin(); target != targets.cend(); target++)
     {
         bool target_exists = false;
-        for (auto configuration = configurations.Begin(); configuration != configurations.End() && !target_exists; configuration++)
+        for (auto configuration = configurations_node.Begin(); configuration != configurations_node.End(); configuration++)
         {
             if (!configuration->IsObject()) continue;
-            if (!configuration->HasMember("type")) continue;
-            const JSONValue &typ = (*configuration)["type"];
-            if (!typ.IsString() || std::strcmp(typ.GetString(), "gdb") != 0) continue;
-            if (!configuration->HasMember("request")) continue;
-            const JSONValue &request = (*configuration)["request"];
-            if (!request.IsString() || std::strcmp(request.GetString(), "launch") != 0) continue;
-            if (!configuration->HasMember("target")) continue;
-            const JSONValue &target_value = (*configuration)["target"];
-            if (!request.IsString() || target_value.GetString() != target->path) continue;
-            target_exists = true;
+            const JSONValue *typ_node = find_string(*configuration, "type");
+            if (typ_node == nullptr || std::strcmp(typ_node->GetString(), "gdb") != 0) continue;
+            const JSONValue *request_node = find_string(*configuration, "request");
+            if (request_node == nullptr || std::strcmp(request_node->GetString(), "launch") != 0) continue;
+            const JSONValue *target_node = find_string(*configuration, "target");
+            if (target_node == nullptr || target_node->GetString() != target->path) continue;
+            
             checkout_configuration(*configuration, *target, false);
+            target_exists = true;
+            break;
         }
         if (!target_exists)
         {
-            JSONValue configuration = JSONValue(rapidjson::kObjectType);
-            checkout_configuration(configuration, *target, true);
-            configurations.PushBack(std::move(configuration), allocator);
+            JSONValue configuration_node = JSONValue(rapidjson::kObjectType);
+            checkout_configuration(configuration_node, *target, true);
+            configurations_node.PushBack(std::move(configuration_node), *allocator);
             change = true;
         }
     }
 }
 
-void rm::NativeDebugModule::Checkout::checkout_document(JSONValue &document, const std::vector<Target> &targets)
+void rm::NativeDebugModule::Checkout::checkout_document(const std::vector<Target> &targets)
 {
-    if (!document.IsObject()) { document.SetObject(); change = true; }
-    if (!document.HasMember("configurations")) { document.AddMember("configurations", JSONValue(rapidjson::kArrayType), allocator); change = true; }
-    checkout_configurations(document["configurations"], targets);
+    if (!document->IsObject()) { document->SetObject(); change = true; }
+    JSONValue &configurations_node = create_array(*document, "configurations");
+    checkout_configurations(configurations_node, targets);
 }
 
 rm::Module *rm::NativeDebugModule::create_module(const std::string &requested_module)
@@ -170,10 +168,8 @@ void rm::NativeDebugModule::post_work(const RetroMake *system)
     
     //Checkout
     const std::string launch_file = system->source_directory + ".vscode/launch.json";
-    JSONDocument document;
-    bool change = !document_read(document, launch_file);
-    Checkout checkout(_lldb, document.GetAllocator());
-    checkout.checkout_document(document, targets);
-    change |= checkout.change;
-    if (change) document_write(document, launch_file, 2);
+    Checkout checkout(*this);
+    checkout.document_read(launch_file);
+    checkout.checkout_document(targets);
+    if (checkout.change) checkout.document_write(launch_file, 2);
 }

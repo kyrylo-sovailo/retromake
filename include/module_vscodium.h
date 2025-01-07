@@ -1,5 +1,7 @@
 #pragma once
 #include "module.h"
+#include "json.h"
+#include "retromake.h"
 #include "util.h"
 
 namespace rm
@@ -7,18 +9,16 @@ namespace rm
     class VSCodiumModule : public Module
     {
     private:
-        struct Checkout
+        struct Checkout : JSONEditor
         {
-            std::string binary_directory;
-            JSONAllocator &allocator;
-            bool change;
-            
-            Checkout(const std::string &binary_directory, JSONAllocator &allocator);
-            void checkout_args(JSONValue &args);
-            void checkout_options(JSONValue &options);
-            void checkout_task(JSONValue &task);
-            void checkout_tasks(JSONValue &tasks);
-            void checkout_document(JSONValue &document);
+            const RetroMake &owner;
+            Checkout(const RetroMake &owner);
+
+            void checkout_args(JSONValue &args_node);
+            void checkout_options(JSONValue &options_node);
+            void checkout_task(JSONValue &task_node);
+            void checkout_tasks(JSONValue &tasks_node);
+            void checkout_document();
         };
     
     public:

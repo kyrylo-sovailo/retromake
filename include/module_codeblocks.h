@@ -2,6 +2,7 @@
 #include "module.h"
 #include "codemodel.h"
 #include "util.h"
+#include "xml.h"
 #include <map>
 #include <set>
 
@@ -10,20 +11,14 @@ namespace rm
     class CodeBlocksModule : public Module
     {
     public:
-        struct Checkout
+        struct Checkout : XMLEditor
         {
             const CodeBlocksModule &owner;
-            XMLDocument &document;
-            std::string compiler;
-            bool change;
+            const std::string compiler;
 
-            Checkout(const CodeBlocksModule &owner, XMLDocument &document, const std::string &compiler);
-            XMLNode *create_node(XMLNode *parent, const char *name);
-            XMLNode *create_node(XMLNode *parent, const char *name, const char *attribute_name);
-            XMLNode *create_node(XMLNode *parent, const char *name, const char *attribute_name, const char *attribute_value);
-            void checkout_attribute(XMLNode *node, const char *attribute_name, const char *attribute_value);
-            void checkout_target(XMLNode *target_node, const Target &target);
-            void checkout_build(XMLNode *build_node, const std::vector<Target> &targets);
+            Checkout(const CodeBlocksModule &owner, const std::string &compiler);
+            void checkout_target(XMLNode &target_node, const Target &target);
+            void checkout_build(XMLNode &build_node, const std::vector<Target> &targets);
             void checkout_document(const std::vector<Target> &targets, const Project &project);
         };
 
