@@ -7,6 +7,10 @@
 namespace rm
 {
     //Parsing
+    bool begins_with(const std::string &string, const char *pattern) noexcept;
+    bool begins_with(const char *string, const char *pattern) noexcept;
+    bool ends_with(const std::string &string, const char *pattern) noexcept;
+    bool ends_with(const char *string, const char *pattern) noexcept;
     std::string trim(const std::string &string);
     std::string lower(const std::string &string);
     std::vector<std::string> parse(const std::string &string, char delimiter);

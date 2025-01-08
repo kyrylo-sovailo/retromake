@@ -26,7 +26,7 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode &target_node, const
     //Option output
     std::string directory = target.path; path_parent(&directory);
     std::string basename = path_base(target.path);
-    if ((target.typ == "STATIC_LIBRARY" || target.typ == "SHARED_LIBRARY") && (std::strncmp(basename.c_str(), "lib", 3) == 0))
+    if ((target.typ == "STATIC_LIBRARY" || target.typ == "SHARED_LIBRARY") && begins_with(basename, "lib"))
         basename.erase(0, 3);
     
     XMLNode &option_output_node = create_node(target_node, "Option", "output");
@@ -52,7 +52,7 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode &target_node, const
     else if (target.typ == "SHARED_LIBRARY") checkout_attribute(create_node(target_node, "Option", "type"), "type", "3");
 
     //Option compiler
-    checkout_attribute(create_node(target_node, "Option", "compiler"), "compiler", compiler.c_str());
+    checkout_attribute(create_node(target_node, "Option", "compiler"), "compiler", compiler);
 
     //Option createDefFile & Option createStaticLib
     if (target.typ == "SHARED_LIBRARY")
@@ -65,7 +65,7 @@ void rm::CodeBlocksModule::Checkout::checkout_target(XMLNode &target_node, const
     XMLNode &compiler_node = create_node(target_node, "Compiler");
     for (auto option = target.options.cbegin(); option != target.options.cend(); option++)
     {
-        create_node(compiler_node, "Add", "option", option->c_str());
+        create_node(compiler_node, "Add", "option", *option);
     }
     for (auto define = target.defines.cbegin(); define != target.defines.cend(); define++)
     {
@@ -104,13 +104,10 @@ void rm::CodeBlocksModule::Checkout::checkout_build(XMLNode &build_node, const s
 void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target> &targets, const Project &project)
 {
     //Declaration
-    XMLNode &declaration = create_declaration();
-    checkout_attribute(declaration, "version", "1.0");
-    checkout_attribute(declaration, "encoding", "UTF-8");
-    checkout_attribute(declaration, "standalone", "yes");
+    create_declaration("1.0", "UTF-8", "yes");
 
     //CodeBlocks_project_file
-    XMLNode &root = create_node(*document, "CodeBlocks_project_file");
+    XMLNode &root = create_root_node("CodeBlocks_project_file");
 
     //FileVersion
     XMLNode &file_version = create_node(root, "FileVersion");
@@ -119,9 +116,9 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
 
     //Project
     XMLNode &project_node = create_node(root, "Project");
-    checkout_attribute(create_node(project_node, "Option", "title"), "title", project.name.c_str());
+    checkout_attribute(create_node(project_node, "Option", "title"), "title", project.name);
     checkout_attribute(create_node(project_node, "Option", "pch_mode"), "pch_mode", "2");
-    checkout_attribute(create_node(project_node, "Option", "compiler"), "compiler", compiler.c_str());
+    checkout_attribute(create_node(project_node, "Option", "compiler"), "compiler", compiler);
     
     //Build
     XMLNode &build_node = create_node(project_node, "Build");
@@ -135,7 +132,7 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
     {
         std::string add_alias_string = "all";
         if (!configuration_name->empty()) add_alias_string += '_' + *configuration_name;
-        XMLNode &add_alias = create_node(virtual_targets, "Add", "alias", add_alias_string.c_str());
+        XMLNode &add_alias = create_node(virtual_targets, "Add", "alias", add_alias_string);
 
         std::string add_targets_string = "";
         for (auto target = targets.cbegin(); target != targets.cend(); target++)
@@ -147,7 +144,7 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
                 add_targets_string += ';';
             }
         }
-        checkout_attribute(add_alias, "targets", add_targets_string.c_str());
+        checkout_attribute(add_alias, "targets", add_targets_string);
     }
 
     //Compiler
@@ -167,12 +164,12 @@ void rm::CodeBlocksModule::Checkout::checkout_document(const std::vector<Target>
     }
     for (auto source = map.cbegin(); source != map.cend(); source++)
     {
-        XMLNode &unit_filename = create_node(project_node, "Unit", "filename", source->first.c_str());
+        XMLNode &unit_filename = create_node(project_node, "Unit", "filename", source->first);
         for (auto target = source->second.cbegin(); target != source->second.cend(); target++)
         {
             std::string option_target_string = (*target)->name;
             if (!(*target)->configuration_name.empty()) option_target_string += '_' + (*target)->configuration_name;
-            create_node(unit_filename, "Option", "target", option_target_string.c_str());
+            create_node(unit_filename, "Option", "target", option_target_string);
         }
     }
 

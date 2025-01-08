@@ -31,9 +31,7 @@ std::vector<rm::Target> rm::codemodel_parse(const std::string &binary_directory,
             const char *entry = search.get(&directory);
             if (entry == nullptr) break;
             if (directory) continue;
-            if (std::strlen(entry) < 13) continue;
-            if (std::memcmp(entry, "codemodel-v2-", 13) != 0) continue;
-            if (std::memcmp(entry + strlen(entry) - 5, ".json", 5) != 0) continue;
+            if (!begins_with(entry, "codemodel-v2-") || !ends_with(entry, ".json")) continue;
             if (!codemodel_file.empty()) throw std::runtime_error("CMake file API returned several codemodels");
             codemodel_file = reply_directory + entry;
         }
@@ -190,7 +188,7 @@ std::vector<rm::Target> rm::codemodel_parse(const std::string &binary_directory,
                         const auto frag = parse(frag_node->GetString(), ' ');
                         result_target.linker_options.insert(frag.cbegin(), frag.cend());
                     }
-                    else if (std::strcmp(role_node->GetString(), "libraries") == 0 && std::strncmp(fragment_node->GetString(), "-W", 2) != 0) //TODO: GCC specific
+                    else if (std::strcmp(role_node->GetString(), "libraries") == 0 && begins_with(fragment_node->GetString(), "-W")) //TODO: GCC specific
                     {
                         const auto frag = parse(frag_node->GetString(), ' ');
                         result_target.linker_sources.insert(frag.cbegin(), frag.cend());

@@ -1,19 +1,5 @@
 #include "../include/util.h"
 
-#include <rapidxml/rapidxml.hpp>
-namespace rapidxml { namespace internal {
-template <class OutIt, class Ch> inline OutIt print_children(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_attributes(OutIt, const xml_node<Ch>*, int);
-template <class OutIt, class Ch> inline OutIt print_data_node(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_cdata_node(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_element_node(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_declaration_node(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_comment_node(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_doctype_node(OutIt, const xml_node<Ch>*, int, int);
-template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_node<Ch>*, int, int);
-} }
-#include <rapidxml/rapidxml_print.hpp>
-
 #include <dirent.h>
 #include <limits.h>
 #include <pwd.h>
@@ -26,6 +12,36 @@ template <class OutIt, class Ch> inline OutIt print_pi_node(OutIt, const xml_nod
 #include <fstream>
 #include <stdexcept>
 #include <vector>
+
+bool rm::begins_with(const std::string &string, const char *pattern) noexcept
+{
+    const size_t pattern_size = std::strlen(pattern);
+    if (string.size() < pattern_size) return false;
+    else return std::memcmp(string.c_str(), pattern, pattern_size) == 0;
+}
+
+bool rm::begins_with(const char *string, const char *pattern) noexcept
+{
+    const size_t string_size = std::strlen(string);
+    const size_t pattern_size = std::strlen(pattern);
+    if (string_size < pattern_size) return false;
+    else return std::memcmp(string, pattern, pattern_size) == 0;
+}
+
+bool rm::ends_with(const std::string &string, const char *pattern) noexcept
+{
+    const size_t pattern_size = std::strlen(pattern);
+    if (string.size() < pattern_size) return false;
+    else return std::memcmp(string.c_str() + string.size() - pattern_size, pattern, pattern_size) == 0;
+}
+
+bool rm::ends_with(const char *string, const char *pattern) noexcept
+{
+    const size_t string_size = std::strlen(string);
+    const size_t pattern_size = std::strlen(pattern);
+    if (string_size < pattern_size) return false;
+    else return std::memcmp(string + string_size - pattern_size, pattern, pattern_size) == 0;
+}
 
 std::string rm::trim(const std::string &string)
 {
@@ -187,7 +203,7 @@ std::string rm::path_working_directory()
     {
         char *cwd = getcwd(&directory[0], directory.size());
         if (cwd == nullptr) directory.resize(directory.size() * 2);
-        else { directory.resize(strlen(directory.c_str())); break; }
+        else { directory.resize(std::strlen(directory.c_str())); break; }
     }
     if (directory.back() != '/') directory.push_back('/');
     return directory;
@@ -213,7 +229,8 @@ std::string rm::path_relative(const std::string &target, const std::string &base
         if (base[i2] == '/') { relative += "../"; _depth++; }
     }
     if (depth != nullptr) *depth = _depth;
-    return relative + (target.c_str() + i);
+    relative.append(target.cbegin() + i, target.cend());
+    return relative;
 }
 
 std::string rm::path_base(const std::string &path)
@@ -364,7 +381,7 @@ void rm::remove_cmake_define(std::vector<std::string> *arguments, const char *pa
         {
             auto current = argument;
             current++;
-            if (current != arguments->end() && std::strncmp(current->c_str(), pattern, std::strlen(pattern)) == 0)
+            if (current != arguments->end() && begins_with(*current, pattern))
             {
                 argument = arguments->erase(argument);
                 argument = arguments->erase(argument);
@@ -375,8 +392,7 @@ void rm::remove_cmake_define(std::vector<std::string> *arguments, const char *pa
                 argument++;
             }
         }
-        else if (std::strncmp(argument->c_str(), "-D", 2) == 0
-        && std::strncmp(argument->c_str() + 2, pattern, std::strlen(pattern)) == 0)
+        else if (begins_with(*argument, "-D") && begins_with(argument->c_str() + 2, pattern))
         {
             argument = arguments->erase(argument);
         }

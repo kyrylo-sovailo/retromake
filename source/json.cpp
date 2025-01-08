@@ -133,7 +133,7 @@ void rm::JSONEditor::checkout_string(JSONValue &node, const char *value)
 
 void rm::JSONEditor::checkout_string(JSONValue &node, const std::string &value)
 {
-    if (!node.IsString() || std::strcmp(node.GetString(), value.c_str()) != 0)
+    if (!node.IsString() || node.GetString() != value)
     {
         node.SetString(value.c_str(), *allocator); //allocate
         change = true;

@@ -71,7 +71,7 @@ std::vector<rm::CreateModule*> rm::RetroMake::_load_module_functions()
         const char *entry = search.get(&directory);
         if (entry == nullptr) break;
         if (directory) continue;
-        if (std::strlen(entry) < 4 || std::memcmp(entry + strlen(entry) - 3, ".so", 3) != 0) continue;
+        if (ends_with(entry, ".so")) continue;
         executable_directory.resize(executable_directory_size);
         executable_directory += entry;
         void *handle = dlopen(executable_directory.c_str(), RTLD_NOW);
