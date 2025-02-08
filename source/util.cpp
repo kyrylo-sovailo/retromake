@@ -214,6 +214,7 @@ std::string rm::path_user_directory()
     std::string directory;
     struct passwd *user = getpwuid(getuid());
     if (user == nullptr) throw std::runtime_error("getpwuid() failed");
+    directory = user->pw_dir;
     if (directory.back() != '/') directory.push_back('/');
     return directory;
 }
